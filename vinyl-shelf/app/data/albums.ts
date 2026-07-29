@@ -68,6 +68,12 @@ export function updateAlbum(slug: string, input: CreateAlbumInput) {
   return { ...album }
 }
 
+export function deleteAlbum(slug: string) {
+  let before = albums.length
+  albums = albums.filter((album) => album.slug !== slug)
+  return albums.length < before
+}
+
 export function resetAlbumsForTest() {
   albums = seedAlbums.map((album) => ({ ...album }))
 }

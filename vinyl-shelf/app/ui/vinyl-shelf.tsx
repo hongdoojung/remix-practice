@@ -158,6 +158,12 @@ export function AlbumDetailPage(handle: Handle<{ album: Album }>) {
             <a href={routes.albums.index.href()} mix={plainLinkStyle}>
               Back to albums
             </a>
+            <form method="post" action={routes.albums.destroy.href({ slug: album.slug })}>
+              <input type="hidden" name="_method" value="DELETE" />
+              <button type="submit" mix={dangerButtonStyle}>
+                Delete album
+              </button>
+            </form>
           </div>
         </article>
       </AppShell>
@@ -400,6 +406,16 @@ const buttonStyle = css({
   font: 'inherit',
   fontWeight: 800,
   padding: '11px 14px',
+})
+const dangerButtonStyle = css({
+  background: '#a11d28',
+  border: 0,
+  borderRadius: '8px',
+  color: '#ffffff',
+  cursor: 'pointer',
+  font: 'inherit',
+  fontWeight: 800,
+  padding: '10px 14px',
 })
 const errorStyle = css({ color: '#a11d28', fontWeight: 700 })
 const detailStyle = css({

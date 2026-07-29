@@ -17,9 +17,8 @@ export default createController(routes.albums.edit, {
 
       return context.render(<AlbumEditPage album={album} />)
     },
-    async action(context) {
-      let formData = await context.request.formData()
-      let result = validateCreateAlbum(formData)
+    action(context) {
+      let result = validateCreateAlbum(context.formData)
 
       if (!result.ok) {
         let album = getAlbum(context.params.slug)

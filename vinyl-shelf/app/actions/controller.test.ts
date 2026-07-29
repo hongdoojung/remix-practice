@@ -108,6 +108,34 @@ describe('start here practice routes', () => {
     assert.match(await detail.text(), /Updated through a nested controller action/)
   })
 
+  it('deletes an album through method override middleware', async () => {
+    let response = await router.fetch(
+      request(routes.albums.destroy.href({ slug: 'kind-of-blue' }), {
+        method: 'POST',
+        body: new URLSearchParams({ _method: 'DELETE' }),
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      }),
+    )
+
+    assert.equal(response.status, 303)
+    assert.equal(response.headers.get('location'), routes.albums.index.href())
+
+    let detail = await router.fetch(request(routes.albums.show.href({ slug: 'kind-of-blue' })))
+    assert.equal(detail.status, 404)
+  })
+
+  it('adds a request id to context and response headers', async () => {
+    let response = await router.fetch(
+      request(routes.apiAlbums.href(), {
+        headers: { 'X-Request-Id': 'test-request-123' },
+      }),
+    )
+    let payload = (await response.json()) as { requestId: string }
+
+    assert.equal(response.headers.get('X-Request-Id'), 'test-request-123')
+    assert.equal(payload.requestId, 'test-request-123')
+  })
+
   it('returns albums as JSON from a resource-style route', async () => {
     let response = await router.fetch(request(routes.apiAlbums.href()))
     let payload = (await response.json()) as { albums: Array<{ title: string }> }

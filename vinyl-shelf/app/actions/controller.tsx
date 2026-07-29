@@ -15,8 +15,8 @@ export default createController(routes, {
     home(context) {
       return context.render(<HomePage albums={listAlbums()} />)
     },
-    apiAlbums() {
-      return new Response(JSON.stringify({ albums: listAlbums() }), {
+    apiAlbums(context) {
+      return new Response(JSON.stringify({ albums: listAlbums(), requestId: context.requestId }), {
         headers: { 'Content-Type': 'application/json; charset=utf-8' },
       })
     },
