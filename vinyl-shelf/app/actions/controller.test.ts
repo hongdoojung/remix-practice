@@ -1,5 +1,8 @@
 import * as assert from 'remix/assert'
-import { beforeEach, describe, it } from 'remix/test'
+// `remix/test` registers suites for the `remix test` runner, which needs
+// playwright. This app runs `node --test`, so the suite uses the node test
+// runner directly and keeps `remix/assert` for assertions.
+import { beforeEach, describe, it } from 'node:test'
 
 import { resetAlbumsForTest } from '../data/albums.ts'
 import { router } from '../router.ts'
