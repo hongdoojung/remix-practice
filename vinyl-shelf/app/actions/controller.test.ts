@@ -149,3 +149,89 @@ describe('start here practice routes', () => {
     assert.equal(payload.albums[0]?.title, 'Kind of Blue')
   })
 })
+
+describe('rendering ui', () => {
+  it('renders a complete document shell with head content and component styles', async () => {
+    let response = await router.fetch(request(routes.home.href()))
+    let html = await response.text()
+
+    assert.match(html, /^<!DOCTYPE html>/)
+    assert.equal(response.headers.get('content-type'), 'text/html; charset=UTF-8')
+    assert.match(html, /<title>Vinyl Shelf \| Start Here<\/title>/)
+    assert.match(html, /<meta name="description" content="A Remix 3 practice app/)
+    assert.match(html, /<link rel="stylesheet" href="\/app\.css" \/>/)
+    // The server-rendered page carries its component styles without waiting
+    // for browser JavaScript.
+    assert.match(html, /<style data-rmx="rmxc-/)
+  })
+
+  it('serves the app stylesheet with the cascade layer order', async () => {
+    let response = await router.fetch(request('/app.css'))
+    let css = await response.text()
+
+    assert.equal(response.status, 200)
+    assert.match(css, /@layer base, rmx, app;/)
+    assert.match(css, /--shelf-accent/)
+  })
+
+  it('reads the shell context from a nested navigation component', async () => {
+    let response = await router.fetch(request(routes.albums.index.href()))
+    let html = await response.text()
+
+    assert.match(html, /aria-current="page"[^>]*>\s*Albums/)
+    assert.match(html, /3 albums/)
+  })
+
+  it('connects each field label to its input through handle.id', async () => {
+    let response = await router.fetch(request(routes.albums.index.href()))
+    let html = await response.text()
+    let labelIds = [...html.matchAll(/<label for="([^"]+)"/g)].map((match) => match[1])
+
+    assert.ok(labelIds.length >= 5)
+    for (let id of labelIds) {
+      assert.match(html, new RegExp(`id="${id}"[^>]*name="`))
+    }
+  })
+
+  it('renders a page-level 404 through context.render with a status', async () => {
+    let response = await router.fetch(request(routes.albums.show.href({ slug: 'nope' })))
+
+    assert.equal(response.status, 404)
+    assert.match(response.headers.get('content-type') ?? '', /text\/html/)
+  })
+
+  it('renders an HTML feed without the component runtime', async () => {
+    let response = await router.fetch(request(routes.feed.href()))
+    let html = await response.text()
+
+    assert.equal(response.status, 200)
+    assert.match(response.headers.get('content-type') ?? '', /text\/html/)
+    assert.match(html, /^<!DOCTYPE html>/)
+    assert.match(html, /<a href="\/albums\/kind-of-blue">Kind of Blue<\/a>/)
+    // No component runtime means no generated component styles or client data.
+    assert.equal(/<style data-rmx=/.test(html), false)
+  })
+
+  it('escapes interpolated values in the html template feed', async () => {
+    let response = await router.fetch(
+      request(routes.albums.create.href(), {
+        method: 'POST',
+        body: new URLSearchParams({
+          title: '<script>alert(1)</script>',
+          artist: 'Test',
+          year: '2020',
+          genre: 'Test',
+          notes: 'Escaping check.',
+        }),
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      }),
+    )
+    assert.equal(response.status, 303)
+
+    let feed = await router.fetch(request(routes.feed.href()))
+    let html = await feed.text()
+
+    assert.equal(html.includes('<script>alert(1)</script>'), false)
+    assert.match(html, /&lt;script&gt;/)
+  })
+})

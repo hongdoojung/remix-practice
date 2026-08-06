@@ -4,6 +4,7 @@ import { assetServer } from '../assets.ts'
 import { listAlbums } from '../data/albums.ts'
 import { routes } from '../routes.ts'
 import { HomePage } from '../ui/vinyl-shelf.tsx'
+import { renderAlbumFeed } from './feed.ts'
 
 export default createController(routes, {
   actions: {
@@ -14,6 +15,9 @@ export default createController(routes, {
     },
     home(context) {
       return context.render(<HomePage albums={listAlbums()} />)
+    },
+    feed() {
+      return renderAlbumFeed(listAlbums())
     },
     apiAlbums(context) {
       return new Response(JSON.stringify({ albums: listAlbums(), requestId: context.requestId }), {

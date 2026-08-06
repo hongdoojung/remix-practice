@@ -1,5 +1,7 @@
 import type { Handle } from 'remix/ui'
 import { css } from 'remix/ui'
+import button from 'remix/ui/button'
+import input from 'remix/ui/input'
 
 import type { Album } from '../../../data/albums.ts'
 import type { AlbumFieldErrors, AlbumFormValues } from '../../../data/validation.ts'
@@ -24,7 +26,10 @@ export function AlbumEditPage(
     }
 
     return (
-      <Document title={`Edit ${album.title} | Vinyl Shelf`}>
+      <Document
+        title={`Edit ${album.title} | Vinyl Shelf`}
+        description={`Edit the shelf entry for ${album.title}.`}
+      >
         <main mix={pageStyle}>
           <nav mix={crumbStyle}>
             <a href={routes.albums.index.href()}>Albums</a>
@@ -45,12 +50,8 @@ export function AlbumEditPage(
               <TextField name="artist" label="Artist" value={formValues.artist} error={errors.artist} />
               <TextField name="year" label="Year" value={formValues.year} error={errors.year} />
               <TextField name="genre" label="Genre" value={formValues.genre} error={errors.genre} />
-              <label mix={fieldStyle}>
-                <span>Notes</span>
-                <textarea name="notes" rows={5} defaultValue={formValues.notes} />
-                {errors.notes ? <small mix={errorStyle}>{errors.notes}</small> : null}
-              </label>
-              <button type="submit" mix={buttonStyle}>
+              <TextArea name="notes" label="Notes" value={formValues.notes} error={errors.notes} />
+              <button type="submit" class="shelf-cta" mix={button({ tone: 'primary', size: 'lg' })}>
                 Save changes
               </button>
             </form>
@@ -71,24 +72,68 @@ function TextField(
 ) {
   return () => {
     let { name, label, value, error } = handle.props
+    let errorId = `${handle.id}-error`
 
     return (
-      <label mix={fieldStyle}>
-        <span>{label}</span>
-        <input name={name} defaultValue={value} />
-        {error ? <small mix={errorStyle}>{error}</small> : null}
-      </label>
+      <div mix={fieldStyle}>
+        <label htmlFor={handle.id}>{label}</label>
+        <input
+          id={handle.id}
+          name={name}
+          defaultValue={value}
+          aria-describedby={error ? errorId : undefined}
+          aria-invalid={error ? 'true' : undefined}
+          mix={input({ size: 'lg' })}
+        />
+        {error ? (
+          <small id={errorId} mix={errorStyle}>
+            {error}
+          </small>
+        ) : null}
+      </div>
+    )
+  }
+}
+
+function TextArea(
+  handle: Handle<{
+    name: keyof AlbumFormValues
+    label: string
+    value: string
+    error?: string
+  }>,
+) {
+  return () => {
+    let { name, label, value, error } = handle.props
+    let errorId = `${handle.id}-error`
+
+    return (
+      <div mix={fieldStyle}>
+        <label htmlFor={handle.id}>{label}</label>
+        <textarea
+          id={handle.id}
+          name={name}
+          rows={5}
+          defaultValue={value}
+          aria-describedby={error ? errorId : undefined}
+          aria-invalid={error ? 'true' : undefined}
+        />
+        {error ? (
+          <small id={errorId} mix={errorStyle}>
+            {error}
+          </small>
+        ) : null}
+      </div>
     )
   }
 }
 
 const pageStyle = css({
-  background: '#f4f1eb',
-  color: '#1f2933',
-  fontFamily:
-    'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+  background: 'var(--shelf-bg)',
+  color: 'var(--shelf-ink)',
+  fontFamily: 'var(--shelf-font)',
   minHeight: '100vh',
-  padding: '32px 24px',
+  padding: 'calc(var(--shelf-page) * 2) var(--shelf-page)',
 })
 
 const crumbStyle = css({
@@ -96,13 +141,13 @@ const crumbStyle = css({
   gap: '8px',
   margin: '0 auto 18px',
   maxWidth: '720px',
-  '& a': { color: '#295b70', fontWeight: 800, textDecoration: 'none' },
+  '& a': { color: 'var(--shelf-link)', fontWeight: 800, textDecoration: 'none' },
 })
 
 const panelStyle = css({
-  background: '#ffffff',
-  border: '1px solid #d8d0c3',
-  borderRadius: '8px',
+  background: 'var(--shelf-surface)',
+  border: '1px solid var(--shelf-line)',
+  borderRadius: 'var(--shelf-radius)',
   display: 'grid',
   gap: '16px',
   margin: '0 auto',
@@ -111,7 +156,7 @@ const panelStyle = css({
 })
 
 const eyebrowStyle = css({
-  color: '#1f6f54',
+  color: 'var(--shelf-accent)',
   fontSize: '0.78rem',
   fontWeight: 800,
   letterSpacing: '0.04em',
@@ -119,7 +164,7 @@ const eyebrowStyle = css({
   textTransform: 'uppercase',
 })
 
-const leadStyle = css({ color: '#52616f', lineHeight: 1.7, margin: 0 })
+const leadStyle = css({ color: 'var(--shelf-muted)', lineHeight: 1.7, margin: 0 })
 
 const formStyle = css({
   display: 'grid',
@@ -129,24 +174,13 @@ const formStyle = css({
 const fieldStyle = css({
   display: 'grid',
   gap: '6px',
-  '& span': { fontWeight: 800 },
-  '& input, & textarea': {
-    border: '1px solid #b9c2ca',
-    borderRadius: '6px',
+  '& label': { fontWeight: 800 },
+  '& textarea': {
+    border: '1px solid var(--shelf-field-line)',
+    borderRadius: 'var(--shelf-radius-sm)',
     font: 'inherit',
     padding: '10px 12px',
   },
 })
 
-const buttonStyle = css({
-  background: '#172126',
-  border: 0,
-  borderRadius: '8px',
-  color: '#ffffff',
-  cursor: 'pointer',
-  font: 'inherit',
-  fontWeight: 800,
-  padding: '11px 14px',
-})
-
-const errorStyle = css({ color: '#a11d28', fontWeight: 700 })
+const errorStyle = css({ color: 'var(--shelf-danger)', fontWeight: 700 })

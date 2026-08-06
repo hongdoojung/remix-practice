@@ -1,5 +1,7 @@
 import type { Handle, RemixNode } from 'remix/ui'
 import { css } from 'remix/ui'
+import button from 'remix/ui/button'
+import input from 'remix/ui/input'
 
 import { AlbumPreview } from '../assets/album-preview.tsx'
 import type { Album } from '../data/albums.ts'
@@ -21,7 +23,12 @@ export function HomePage(handle: Handle<{ albums: Album[] }>) {
     let featured = albums[0]
 
     return (
-      <AppShell title="Vinyl Shelf | Start Here" activePath="/">
+      <AppShell
+        title="Vinyl Shelf | Start Here"
+        description="A Remix 3 practice app for routing, request handling, and server-rendered UI."
+        activePath="/"
+        albumCount={albums.length}
+      >
         <section mix={heroStyle}>
           <div>
             <p mix={eyebrowStyle}>Start Here</p>
@@ -34,7 +41,7 @@ export function HomePage(handle: Handle<{ albums: Album[] }>) {
               <a href={routes.albums.index.href()} mix={primaryLinkStyle}>
                 Browse albums
               </a>
-              <a href="https://guides.remix.run/start-here/" mix={plainLinkStyle}>
+              <a href="https://guides.remix.run/rendering-ui/" mix={plainLinkStyle}>
                 Original guide
               </a>
             </div>
@@ -68,6 +75,9 @@ export function HomePage(handle: Handle<{ albums: Album[] }>) {
               <p mix={eyebrowStyle}>Seed data</p>
               <h2 mix={headingStyle}>Recent shelf entries</h2>
             </div>
+            <a href={routes.feed.href()} mix={plainLinkStyle}>
+              HTML feed
+            </a>
           </div>
           <AlbumGrid albums={albums.slice(0, 3)} />
         </section>
@@ -87,7 +97,12 @@ export function AlbumsPage(
     let { albums, errors = {}, values = emptyValues } = handle.props
 
     return (
-      <AppShell title="Albums | Vinyl Shelf" activePath="/albums">
+      <AppShell
+        title="Albums | Vinyl Shelf"
+        description="Every album on the shelf, with a native form action for adding one more."
+        activePath="/albums"
+        albumCount={albums.length}
+      >
         <section mix={sectionStyle}>
           <div mix={sectionHeaderStyle}>
             <div>
@@ -107,12 +122,8 @@ export function AlbumsPage(
             <TextField name="artist" label="Artist" value={values.artist} error={errors.artist} />
             <TextField name="year" label="Year" value={values.year} error={errors.year} />
             <TextField name="genre" label="Genre" value={values.genre} error={errors.genre} />
-            <label mix={fieldStyle}>
-              <span>Notes</span>
-              <textarea name="notes" rows={4} defaultValue={values.notes} />
-              {errors.notes ? <small mix={errorStyle}>{errors.notes}</small> : null}
-            </label>
-            <button type="submit" mix={buttonStyle}>
+            <TextArea name="notes" label="Notes" value={values.notes} error={errors.notes} />
+            <button type="submit" class="shelf-cta" mix={button({ tone: 'primary', size: 'lg' })}>
               Add album
             </button>
           </form>
@@ -129,7 +140,11 @@ export function AlbumDetailPage(handle: Handle<{ album: Album }>) {
     let { album } = handle.props
 
     return (
-      <AppShell title={`${album.title} | Vinyl Shelf`} activePath="/albums">
+      <AppShell
+        title={`${album.title} | Vinyl Shelf`}
+        description={`${album.title} by ${album.artist}, a ${album.genre} record from ${album.year}.`}
+        activePath="/albums"
+      >
         <article mix={detailStyle}>
           <p mix={eyebrowStyle}>Route params</p>
           <h1 mix={titleStyle}>{album.title}</h1>
@@ -186,37 +201,68 @@ export function NotFoundPage(handle: Handle<{ slug: string }>) {
   )
 }
 
-function AppShell(
-  handle: Handle<{
-    children?: RemixNode
-    title: string
-    activePath: string
-  }>,
+/**
+ * The value descendants need without threading it through every intermediate
+ * component. The provider component is the context key, so
+ * `handle.context.get(AppShell)` stays typed.
+ */
+interface ShellContext {
+  activePath: string
+  albumCount: number | undefined
+}
+
+export function AppShell(
+  handle: Handle<
+    {
+      children?: RemixNode
+      title: string
+      description?: string
+      activePath: string
+      albumCount?: number
+    },
+    ShellContext
+  >,
 ) {
+  handle.context.set({
+    activePath: handle.props.activePath,
+    albumCount: handle.props.albumCount,
+  })
+
   return () => {
-    let { children, title, activePath } = handle.props
+    let { children, title, description } = handle.props
 
     return (
-      <Document title={title}>
+      <Document title={title} description={description}>
         <div mix={shellStyle}>
-          <nav aria-label="Primary" mix={navStyle}>
-            <strong>Vinyl Shelf</strong>
-            <a href={routes.home.href()} aria-current={activePath === '/' ? 'page' : undefined}>
-              Start
-            </a>
-            <a
-              href={routes.albums.index.href()}
-              aria-current={activePath === '/albums' ? 'page' : undefined}
-            >
-              Albums
-            </a>
-            <a href={routes.apiAlbums.href()}>API</a>
-          </nav>
+          <PrimaryNav />
           <main mix={mainStyle}>{children}</main>
         </div>
       </Document>
     )
   }
+}
+
+function PrimaryNav(handle: Handle) {
+  let shell = handle.context.get(AppShell)
+
+  return () => (
+    <nav aria-label="Primary" mix={navStyle}>
+      <strong>Vinyl Shelf</strong>
+      <a href={routes.home.href()} aria-current={shell.activePath === '/' ? 'page' : undefined}>
+        Start
+      </a>
+      <a
+        href={routes.albums.index.href()}
+        aria-current={shell.activePath === '/albums' ? 'page' : undefined}
+      >
+        Albums
+      </a>
+      <a href={routes.apiAlbums.href()}>API</a>
+      {shell.albumCount === undefined ? null : (
+        <span mix={navCountStyle}>{shell.albumCount} albums</span>
+      )}
+    </nav>
+  )
 }
 
 function AlbumGrid(handle: Handle<{ albums: Album[] }>) {
@@ -245,6 +291,10 @@ function Checkpoint(handle: Handle<{ title: string; body: string }>) {
   )
 }
 
+/**
+ * `handle.id` is a stable identifier for this component instance, so a reusable
+ * field can connect its label, control, and error message without an `id` prop.
+ */
 function TextField(
   handle: Handle<{
     name: keyof AlbumFormValues
@@ -255,35 +305,79 @@ function TextField(
 ) {
   return () => {
     let { name, label, value = '', error } = handle.props
+    let errorId = `${handle.id}-error`
 
     return (
-      <label mix={fieldStyle}>
-        <span>{label}</span>
-        <input name={name} defaultValue={value} />
-        {error ? <small mix={errorStyle}>{error}</small> : null}
-      </label>
+      <div mix={fieldStyle}>
+        <label htmlFor={handle.id}>{label}</label>
+        <input
+          id={handle.id}
+          name={name}
+          defaultValue={value}
+          aria-describedby={error ? errorId : undefined}
+          aria-invalid={error ? 'true' : undefined}
+          mix={input({ size: 'lg' })}
+        />
+        {error ? (
+          <small id={errorId} mix={errorStyle}>
+            {error}
+          </small>
+        ) : null}
+      </div>
+    )
+  }
+}
+
+function TextArea(
+  handle: Handle<{
+    name: keyof AlbumFormValues
+    label: string
+    value?: string
+    error?: string
+  }>,
+) {
+  return () => {
+    let { name, label, value = '', error } = handle.props
+    let errorId = `${handle.id}-error`
+
+    return (
+      <div mix={fieldStyle}>
+        <label htmlFor={handle.id}>{label}</label>
+        <textarea
+          id={handle.id}
+          name={name}
+          rows={4}
+          defaultValue={value}
+          aria-describedby={error ? errorId : undefined}
+          aria-invalid={error ? 'true' : undefined}
+        />
+        {error ? (
+          <small id={errorId} mix={errorStyle}>
+            {error}
+          </small>
+        ) : null}
+      </div>
     )
   }
 }
 
 const shellStyle = css({
   minHeight: '100vh',
-  background: '#f4f1eb',
-  color: '#1f2933',
-  fontFamily:
-    'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+  background: 'var(--shelf-bg)',
+  color: 'var(--shelf-ink)',
+  fontFamily: 'var(--shelf-font)',
 })
 
 const navStyle = css({
   alignItems: 'center',
-  background: '#172126',
-  color: '#ffffff',
+  background: 'var(--shelf-shell)',
+  color: 'var(--shelf-ink-inverse)',
   display: 'flex',
   gap: '20px',
   minHeight: '64px',
   padding: '0 28px',
   '& a': {
-    color: '#ffffff',
+    color: 'var(--shelf-ink-inverse)',
     opacity: 0.75,
     textDecoration: 'none',
   },
@@ -299,19 +393,25 @@ const navStyle = css({
   },
 })
 
+const navCountStyle = css({
+  marginLeft: 'auto',
+  opacity: 0.6,
+  '@media (max-width: 640px)': { marginLeft: 0 },
+})
+
 const mainStyle = css({
   display: 'grid',
   gap: '24px',
   margin: '0 auto',
   maxWidth: '1120px',
-  padding: '32px 24px 56px',
+  padding: 'calc(var(--shelf-page) * 2) var(--shelf-page) 56px',
 })
 
 const heroStyle = css({
   alignItems: 'center',
-  background: '#ffffff',
-  border: '1px solid #d8d0c3',
-  borderRadius: '8px',
+  background: 'var(--shelf-surface)',
+  border: '1px solid var(--shelf-line)',
+  borderRadius: 'var(--shelf-radius)',
   display: 'grid',
   gap: '28px',
   gridTemplateColumns: 'minmax(0, 1.2fr) minmax(260px, 0.8fr)',
@@ -328,7 +428,7 @@ const sectionHeaderStyle = css({
   '@media (max-width: 640px)': { alignItems: 'flex-start', flexDirection: 'column' },
 })
 const eyebrowStyle = css({
-  color: '#1f6f54',
+  color: 'var(--shelf-accent)',
   fontSize: '0.78rem',
   fontWeight: 800,
   letterSpacing: '0.04em',
@@ -337,18 +437,27 @@ const eyebrowStyle = css({
 })
 const titleStyle = css({ fontSize: 'clamp(2rem, 4vw, 3.5rem)', lineHeight: 1.02, margin: '6px 0 0' })
 const headingStyle = css({ fontSize: '1.25rem', margin: 0 })
-const leadStyle = css({ color: '#52616f', lineHeight: 1.7, margin: '14px 0 0', maxWidth: '68ch' })
+const leadStyle = css({
+  color: 'var(--shelf-muted)',
+  lineHeight: 1.7,
+  margin: '14px 0 0',
+  maxWidth: '68ch',
+})
 const actionRowStyle = css({ display: 'flex', flexWrap: 'wrap', gap: '12px', marginTop: '24px' })
 const primaryLinkStyle = css({
-  background: '#1f6f54',
-  borderRadius: '8px',
-  color: '#ffffff',
+  background: 'var(--shelf-accent)',
+  borderRadius: 'var(--shelf-radius)',
+  color: 'var(--shelf-ink-inverse)',
   display: 'inline-flex',
   fontWeight: 800,
   padding: '10px 14px',
   textDecoration: 'none',
 })
-const plainLinkStyle = css({ color: '#295b70', fontWeight: 800, textDecoration: 'none' })
+const plainLinkStyle = css({
+  color: 'var(--shelf-link)',
+  fontWeight: 800,
+  textDecoration: 'none',
+})
 const checkpointGridStyle = css({
   display: 'grid',
   gap: '16px',
@@ -360,17 +469,21 @@ const albumGridStyle = css({
   gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
 })
 const cardStyle = css({
-  background: '#ffffff',
-  border: '1px solid #d8d0c3',
-  borderRadius: '8px',
+  background: 'var(--shelf-surface)',
+  border: '1px solid var(--shelf-line)',
+  borderRadius: 'var(--shelf-radius)',
   display: 'grid',
   gap: '10px',
   padding: '18px',
   '& h3, & p': { margin: 0 },
-  '& p': { color: '#52616f' },
-  '& a': { color: '#295b70', fontWeight: 800, textDecoration: 'none' },
+  '& p': { color: 'var(--shelf-muted)' },
+  '& a': { color: 'var(--shelf-link)', fontWeight: 800, textDecoration: 'none' },
 })
-const metaStyle = css({ color: '#1f6f54 !important', fontSize: '0.82rem', fontWeight: 800 })
+const metaStyle = css({
+  color: 'var(--shelf-accent) !important',
+  fontSize: '0.82rem',
+  fontWeight: 800,
+})
 const splitStyle = css({
   alignItems: 'start',
   display: 'grid',
@@ -379,9 +492,9 @@ const splitStyle = css({
   '@media (max-width: 860px)': { gridTemplateColumns: '1fr' },
 })
 const panelStyle = css({
-  background: '#ffffff',
-  border: '1px solid #d8d0c3',
-  borderRadius: '8px',
+  background: 'var(--shelf-surface)',
+  border: '1px solid var(--shelf-line)',
+  borderRadius: 'var(--shelf-radius)',
   display: 'grid',
   gap: '14px',
   padding: '20px',
@@ -389,39 +502,29 @@ const panelStyle = css({
 const fieldStyle = css({
   display: 'grid',
   gap: '6px',
-  '& span': { fontWeight: 800 },
-  '& input, & textarea': {
-    border: '1px solid #b9c2ca',
-    borderRadius: '6px',
+  '& label': { fontWeight: 800 },
+  '& textarea': {
+    border: '1px solid var(--shelf-field-line)',
+    borderRadius: 'var(--shelf-radius-sm)',
     font: 'inherit',
     padding: '10px 12px',
   },
 })
-const buttonStyle = css({
-  background: '#172126',
-  border: 0,
-  borderRadius: '8px',
-  color: '#ffffff',
-  cursor: 'pointer',
-  font: 'inherit',
-  fontWeight: 800,
-  padding: '11px 14px',
-})
 const dangerButtonStyle = css({
-  background: '#a11d28',
+  background: 'var(--shelf-danger)',
   border: 0,
-  borderRadius: '8px',
-  color: '#ffffff',
+  borderRadius: 'var(--shelf-radius)',
+  color: 'var(--shelf-ink-inverse)',
   cursor: 'pointer',
   font: 'inherit',
   fontWeight: 800,
   padding: '10px 14px',
 })
-const errorStyle = css({ color: '#a11d28', fontWeight: 700 })
+const errorStyle = css({ color: 'var(--shelf-danger)', fontWeight: 700 })
 const detailStyle = css({
-  background: '#ffffff',
-  border: '1px solid #d8d0c3',
-  borderRadius: '8px',
+  background: 'var(--shelf-surface)',
+  border: '1px solid var(--shelf-line)',
+  borderRadius: 'var(--shelf-radius)',
   display: 'grid',
   gap: '18px',
   padding: '28px',
@@ -432,7 +535,7 @@ const detailsGridStyle = css({
   gap: '12px',
   gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
   margin: 0,
-  '& div': { borderTop: '1px solid #d8d0c3', paddingTop: '12px' },
-  '& dt': { color: '#52616f' },
+  '& div': { borderTop: '1px solid var(--shelf-line)', paddingTop: '12px' },
+  '& dt': { color: 'var(--shelf-muted)' },
   '& dd': { fontWeight: 800, margin: '4px 0 0' },
 })
