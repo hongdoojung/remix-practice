@@ -1,8 +1,7 @@
 import type { Handle } from 'remix/ui'
 import { css } from 'remix/ui'
-import button from 'remix/ui/button'
-import input from 'remix/ui/input'
 
+import { AlbumEditForm } from '../../../assets/album-edit-form.tsx'
 import type { Album } from '../../../data/albums.ts'
 import type { AlbumFieldErrors, AlbumFormValues } from '../../../data/validation.ts'
 import { routes } from '../../../routes.ts'
@@ -38,92 +37,21 @@ export function AlbumEditPage(
           </nav>
 
           <section mix={panelStyle}>
-            <p mix={eyebrowStyle}>Routing and Controllers</p>
+            <p mix={eyebrowStyle}>Interactivity</p>
             <h1>Edit album</h1>
             <p mix={leadStyle}>
-              This page is rendered by a route-owned controller mapped to the nested edit route.
-              The GET and POST URLs come from the same form route builder.
+              The page stays server-only. Just the form hydrates, so it can add pending state and
+              inline errors on top of the same route action a plain browser submission uses.
             </p>
 
-            <form method="post" action={routes.albums.edit.action.href({ slug: album.slug })} mix={formStyle}>
-              <TextField name="title" label="Title" value={formValues.title} error={errors.title} />
-              <TextField name="artist" label="Artist" value={formValues.artist} error={errors.artist} />
-              <TextField name="year" label="Year" value={formValues.year} error={errors.year} />
-              <TextField name="genre" label="Genre" value={formValues.genre} error={errors.genre} />
-              <TextArea name="notes" label="Notes" value={formValues.notes} error={errors.notes} />
-              <button type="submit" class="shelf-cta" mix={button({ tone: 'primary', size: 'lg' })}>
-                Save changes
-              </button>
-            </form>
+            <AlbumEditForm
+              actionHref={routes.albums.edit.action.href({ slug: album.slug })}
+              values={formValues}
+              errors={errors}
+            />
           </section>
         </main>
       </Document>
-    )
-  }
-}
-
-function TextField(
-  handle: Handle<{
-    name: keyof AlbumFormValues
-    label: string
-    value: string
-    error?: string
-  }>,
-) {
-  return () => {
-    let { name, label, value, error } = handle.props
-    let errorId = `${handle.id}-error`
-
-    return (
-      <div mix={fieldStyle}>
-        <label htmlFor={handle.id}>{label}</label>
-        <input
-          id={handle.id}
-          name={name}
-          defaultValue={value}
-          aria-describedby={error ? errorId : undefined}
-          aria-invalid={error ? 'true' : undefined}
-          mix={input({ size: 'lg' })}
-        />
-        {error ? (
-          <small id={errorId} mix={errorStyle}>
-            {error}
-          </small>
-        ) : null}
-      </div>
-    )
-  }
-}
-
-function TextArea(
-  handle: Handle<{
-    name: keyof AlbumFormValues
-    label: string
-    value: string
-    error?: string
-  }>,
-) {
-  return () => {
-    let { name, label, value, error } = handle.props
-    let errorId = `${handle.id}-error`
-
-    return (
-      <div mix={fieldStyle}>
-        <label htmlFor={handle.id}>{label}</label>
-        <textarea
-          id={handle.id}
-          name={name}
-          rows={5}
-          defaultValue={value}
-          aria-describedby={error ? errorId : undefined}
-          aria-invalid={error ? 'true' : undefined}
-        />
-        {error ? (
-          <small id={errorId} mix={errorStyle}>
-            {error}
-          </small>
-        ) : null}
-      </div>
     )
   }
 }
@@ -166,21 +94,3 @@ const eyebrowStyle = css({
 
 const leadStyle = css({ color: 'var(--shelf-muted)', lineHeight: 1.7, margin: 0 })
 
-const formStyle = css({
-  display: 'grid',
-  gap: '14px',
-})
-
-const fieldStyle = css({
-  display: 'grid',
-  gap: '6px',
-  '& label': { fontWeight: 800 },
-  '& textarea': {
-    border: '1px solid var(--shelf-field-line)',
-    borderRadius: 'var(--shelf-radius-sm)',
-    font: 'inherit',
-    padding: '10px 12px',
-  },
-})
-
-const errorStyle = css({ color: 'var(--shelf-danger)', fontWeight: 700 })

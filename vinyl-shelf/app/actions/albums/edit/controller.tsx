@@ -21,6 +21,15 @@ export default createController(routes.albums.edit, {
       let result = validateCreateAlbum(context.formData)
 
       if (!result.ok) {
+        // The enhanced form asks for JSON so it can show inline errors without
+        // replacing the page. A plain browser submission still gets HTML.
+        if (wantsJson(context.request)) {
+          return new Response(JSON.stringify({ errors: result.errors, values: result.values }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json; charset=utf-8' },
+          })
+        }
+
         let album = getAlbum(context.params.slug)
         if (!album) {
           return context.render(<NotFoundPage slug={context.params.slug} />, { status: 404 })
@@ -40,3 +49,7 @@ export default createController(routes.albums.edit, {
     },
   },
 })
+
+function wantsJson(request: Request) {
+  return request.headers.get('Accept')?.includes('application/json') ?? false
+}

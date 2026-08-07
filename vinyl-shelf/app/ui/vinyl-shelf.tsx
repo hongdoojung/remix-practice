@@ -4,6 +4,8 @@ import button from 'remix/ui/button'
 import input from 'remix/ui/input'
 
 import { AlbumPreview } from '../assets/album-preview.tsx'
+import { AlbumSearch } from '../assets/album-search.tsx'
+import { QueuePanel } from '../assets/queue-panel.tsx'
 import type { Album } from '../data/albums.ts'
 import type { AlbumFieldErrors, AlbumFormValues } from '../data/validation.ts'
 import { routes } from '../routes.ts'
@@ -113,6 +115,14 @@ export function AlbumsPage(
               View JSON
             </a>
           </div>
+        </section>
+
+        {/* Hydrated islands. Everything around them stays server-only. */}
+        <section mix={islandGridStyle}>
+          <div mix={panelStyle}>
+            <AlbumSearch searchHref={routes.apiAlbums.href()} />
+          </div>
+          <QueuePanel albums={albums.map((album) => ({ slug: album.slug, title: album.title }))} />
         </section>
 
         <section mix={splitStyle}>
@@ -483,6 +493,12 @@ const metaStyle = css({
   color: 'var(--shelf-accent) !important',
   fontSize: '0.82rem',
   fontWeight: 800,
+})
+const islandGridStyle = css({
+  alignItems: 'start',
+  display: 'grid',
+  gap: '18px',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
 })
 const splitStyle = css({
   alignItems: 'start',

@@ -20,7 +20,19 @@ export default createController(routes, {
       return renderAlbumFeed(listAlbums())
     },
     apiAlbums(context) {
-      return new Response(JSON.stringify({ albums: listAlbums(), requestId: context.requestId }), {
+      let query = context.url.searchParams.get('query')?.trim().toLowerCase() ?? ''
+      let albums = listAlbums()
+        .filter(
+          (album) =>
+            query === '' ||
+            album.title.toLowerCase().includes(query) ||
+            album.artist.toLowerCase().includes(query) ||
+            album.genre.toLowerCase().includes(query),
+        )
+        // The server owns URL construction, so browser code never rebuilds it.
+        .map((album) => ({ ...album, href: routes.albums.show.href({ slug: album.slug }) }))
+
+      return new Response(JSON.stringify({ albums, query, requestId: context.requestId }), {
         headers: { 'Content-Type': 'application/json; charset=utf-8' },
       })
     },

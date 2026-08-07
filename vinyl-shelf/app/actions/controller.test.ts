@@ -85,8 +85,8 @@ describe('start here practice routes', () => {
     assert.equal(response.status, 200)
     assert.match(html, /Edit album/)
     assert.match(html, /Kind of Blue/)
-    assert.match(html, /Routing and Controllers/)
     assert.match(html, /method="post"/)
+    assert.match(html, /action="\/albums\/kind-of-blue\/edit"/)
   })
 
   it('updates an album through the nested edit action and redirects to show', async () => {
@@ -189,7 +189,7 @@ describe('rendering ui', () => {
 
     assert.ok(labelIds.length >= 5)
     for (let id of labelIds) {
-      assert.match(html, new RegExp(`id="${id}"[^>]*name="`))
+      assert.match(html, new RegExp(`<(input|textarea)[^>]*id="${id}"`))
     }
   })
 
@@ -233,5 +233,135 @@ describe('rendering ui', () => {
 
     assert.equal(html.includes('<script>alert(1)</script>'), false)
     assert.match(html, /&lt;script&gt;/)
+  })
+})
+
+function clientEntries(html: string) {
+  let match = html.match(/<script type="application\/json" id="rmx-data">(.*?)<\/script>/s)
+  if (!match?.[1]) return []
+
+  let data = JSON.parse(match[1]) as {
+    h?: Record<string, { exportName: string; moduleUrl: string; props: Record<string, unknown> }>
+  }
+
+  return Object.values(data.h ?? {})
+}
+
+describe('interactivity', () => {
+  it('marks only the interactive parts of the albums page as client entries', async () => {
+    let response = await router.fetch(request(routes.albums.index.href()))
+    let entries = clientEntries(await response.text())
+    let names = entries.map((entry) => entry.exportName).sort()
+
+    assert.deepEqual(names, ['AlbumSearch', 'QueuePanel'])
+  })
+
+  it('passes route URLs and serializable data to the hydrated search', async () => {
+    let response = await router.fetch(request(routes.albums.index.href()))
+    let search = clientEntries(await response.text()).find(
+      (entry) => entry.exportName === 'AlbumSearch',
+    )
+
+    assert.ok(search)
+    assert.equal(search.props.searchHref, routes.apiAlbums.href())
+    assert.match(search.moduleUrl, /album-search/)
+  })
+
+  it('renders the hydrated edit form as a working form without JavaScript', async () => {
+    let response = await router.fetch(
+      request(routes.albums.edit.index.href({ slug: 'kind-of-blue' })),
+    )
+    let html = await response.text()
+    let entries = clientEntries(html)
+
+    assert.deepEqual(
+      entries.map((entry) => entry.exportName),
+      ['AlbumEditForm'],
+    )
+    // Progressive enhancement: the server-rendered markup is a real form
+    // pointing at the same action the enhanced submit handler fetches.
+    assert.match(html, /<form method="post" action="\/albums\/kind-of-blue\/edit"/)
+    assert.match(html, /name="title"/)
+    assert.match(html, /<button type="submit"/)
+    assert.equal(entries[0]?.props.actionHref, routes.albums.edit.action.href({ slug: 'kind-of-blue' }))
+  })
+
+  it('serves the client entry modules the browser will import', async () => {
+    let response = await router.fetch(request(routes.albums.index.href()))
+    let entries = clientEntries(await response.text())
+
+    for (let entry of entries) {
+      let module = await router.fetch(request(entry.moduleUrl))
+      assert.equal(module.status, 200, `${entry.moduleUrl} should be servable`)
+      assert.match(module.headers.get('content-type') ?? '', /javascript/)
+    }
+  })
+
+  it('answers the enhanced form with JSON errors instead of an HTML page', async () => {
+    let response = await router.fetch(
+      request(routes.albums.edit.action.href({ slug: 'kind-of-blue' }), {
+        method: 'POST',
+        body: new URLSearchParams({
+          title: '',
+          artist: 'Miles Davis',
+          year: 'not-a-year',
+          genre: 'Modal jazz',
+          notes: 'Validation check.',
+        }),
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Accept: 'application/json',
+        },
+      }),
+    )
+    let payload = (await response.json()) as { errors: Record<string, string> }
+
+    assert.equal(response.status, 400)
+    assert.equal(response.headers.get('content-type'), 'application/json; charset=utf-8')
+    assert.match(payload.errors.title ?? '', /required/)
+    assert.match(payload.errors.year ?? '', /Year/)
+  })
+
+  it('still answers a plain browser submission with a re-rendered HTML page', async () => {
+    let response = await router.fetch(
+      request(routes.albums.edit.action.href({ slug: 'kind-of-blue' }), {
+        method: 'POST',
+        body: new URLSearchParams({
+          title: '',
+          artist: 'Miles Davis',
+          year: '1959',
+          genre: 'Modal jazz',
+          notes: 'Validation check.',
+        }),
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      }),
+    )
+    let html = await response.text()
+
+    assert.equal(response.status, 400)
+    assert.match(response.headers.get('content-type') ?? '', /text\/html/)
+    assert.match(html, /Title is required/)
+  })
+
+  it('filters the JSON route the search component fetches', async () => {
+    let response = await router.fetch(request(`${routes.apiAlbums.href()}?query=blue`))
+    let payload = (await response.json()) as {
+      query: string
+      albums: Array<{ title: string; href: string }>
+    }
+
+    assert.equal(response.status, 200)
+    assert.equal(payload.query, 'blue')
+    assert.equal(payload.albums.length, 1)
+    assert.equal(payload.albums[0]?.title, 'Kind of Blue')
+    assert.equal(payload.albums[0]?.href, routes.albums.show.href({ slug: 'kind-of-blue' }))
+  })
+
+  it('returns an empty result set instead of an error for an unknown query', async () => {
+    let response = await router.fetch(request(`${routes.apiAlbums.href()}?query=zzzz`))
+    let payload = (await response.json()) as { albums: unknown[] }
+
+    assert.equal(response.status, 200)
+    assert.equal(payload.albums.length, 0)
   })
 })
