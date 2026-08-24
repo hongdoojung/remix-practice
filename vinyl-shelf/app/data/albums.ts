@@ -74,6 +74,30 @@ export function deleteAlbum(slug: string) {
   return albums.length < before
 }
 
+/**
+ * Albums that share a genre word or a decade with the given album. The list
+ * lives behind its own GET route, so the detail page can stream it in a frame
+ * and reload it without re-rendering the rest of the page.
+ */
+export function getRecommendations(album: Album) {
+  let genreWords = album.genre.toLowerCase().split(/\s+/)
+  let decade = Math.floor(album.year / 10)
+
+  let others = albums.filter((candidate) => candidate.slug !== album.slug)
+  let related = others.filter((candidate) => {
+    let candidateGenre = candidate.genre.toLowerCase()
+    let sharesGenre = genreWords.some((word) => candidateGenre.includes(word))
+    let sharesDecade = Math.floor(candidate.year / 10) === decade
+    return sharesGenre || sharesDecade
+  })
+
+  // A small shelf rarely has true matches, so fall back to the newest entries
+  // instead of rendering an empty region.
+  let picks = related.length > 0 ? related : others
+
+  return picks.slice(0, 3).map((candidate) => ({ ...candidate }))
+}
+
 export function resetAlbumsForTest() {
   albums = seedAlbums.map((album) => ({ ...album }))
 }

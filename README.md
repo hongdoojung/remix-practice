@@ -80,6 +80,7 @@ curriculum 02: Routing and Controllers
 curriculum 03: Request Handling
 curriculum 04: Rendering UI
 curriculum 05: Interactivity
+curriculum 06: Streaming UI with Frames
 ```
 
 특정 챕터 상태로 이동해서 보고 싶다면 해당 커밋을 checkout하면 된다.

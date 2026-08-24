@@ -15,7 +15,7 @@ export function render() {
         let stream = renderToStream(node, {
           frameSrc: request.url,
           signal: request.signal,
-          resolveFrame: (src) => resolveFrame(router, request, src),
+          resolveFrame: (src, target) => resolveFrame(router, request, src, target),
           // Server rendering turns client entries into browser module URLs.
           async resolveClientEntry(entryId, component) {
             if (!entryId.startsWith('file://')) {
@@ -36,11 +36,12 @@ export function render() {
   )
 }
 
-async function resolveFrame(router: Router, request: Request, src: string) {
+async function resolveFrame(router: Router, request: Request, src: string, target?: string) {
   let url = new URL(src, request.url)
 
   let headers = new Headers()
   headers.set('Accept', 'text/html')
+  if (target) headers.set('X-Remix-Target', target)
 
   let cookie = request.headers.get('Cookie')
   if (cookie) headers.set('Cookie', cookie)

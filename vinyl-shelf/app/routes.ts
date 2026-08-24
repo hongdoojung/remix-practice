@@ -7,6 +7,7 @@ export const routes = route({
     index: get('/albums'),
     create: post('/albums'),
     show: get('/albums/:slug'),
+    recommendations: get('/albums/:slug/recommendations'),
     destroy: del('/albums/:slug'),
     edit: form('/albums/:slug/edit'),
   },

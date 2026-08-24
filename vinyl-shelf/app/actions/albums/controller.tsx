@@ -1,10 +1,11 @@
 import { createController } from 'remix/router'
 import { redirect } from 'remix/response/redirect'
 
-import { createAlbum, deleteAlbum, getAlbum, listAlbums } from '../../data/albums.ts'
+import { createAlbum, deleteAlbum, getAlbum, getRecommendations, listAlbums } from '../../data/albums.ts'
 import { validateCreateAlbum } from '../../data/validation.ts'
 import { routes } from '../../routes.ts'
 import { AlbumDetailPage, AlbumsPage, NotFoundPage } from '../../ui/vinyl-shelf.tsx'
+import { AlbumRecommendations } from './recommendations.tsx'
 
 export default createController(routes.albums, {
   actions: {
@@ -31,6 +32,18 @@ export default createController(routes.albums, {
       }
 
       return context.render(<AlbumDetailPage album={album} />)
+    },
+    recommendations(context) {
+      let album = getAlbum(context.params.slug)
+      if (!album) {
+        // The region response stays small: the frame resolver turns it into
+        // bounded HTML instead of replacing the surrounding page.
+        return new Response('Album not found', { status: 404 })
+      }
+
+      return context.render(
+        <AlbumRecommendations album={album} recommendations={getRecommendations(album)} />,
+      )
     },
     destroy(context) {
       let deleted = deleteAlbum(context.params.slug)

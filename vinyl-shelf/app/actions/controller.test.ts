@@ -236,15 +236,26 @@ describe('rendering ui', () => {
   })
 })
 
-function clientEntries(html: string) {
-  let match = html.match(/<script type="application\/json" id="rmx-data">(.*?)<\/script>/s)
-  if (!match?.[1]) return []
+interface RmxData {
+  h?: Record<string, { exportName: string; moduleUrl: string; props: Record<string, unknown> }>
+  f?: Record<string, { name?: string; src: string; status: string }>
+}
 
-  let data = JSON.parse(match[1]) as {
-    h?: Record<string, { exportName: string; moduleUrl: string; props: Record<string, unknown> }>
+// A streamed response may carry several rmx-data scripts, one per flush.
+function rmxData(html: string): RmxData {
+  let merged: RmxData = { h: {}, f: {} }
+
+  for (let match of html.matchAll(/<script type="application\/json" id="rmx-data">(.*?)<\/script>/gs)) {
+    let data = JSON.parse(match[1]!) as RmxData
+    Object.assign(merged.h!, data.h)
+    Object.assign(merged.f!, data.f)
   }
 
-  return Object.values(data.h ?? {})
+  return merged
+}
+
+function clientEntries(html: string) {
+  return Object.values(rmxData(html).h ?? {})
 }
 
 describe('interactivity', () => {
@@ -363,5 +374,87 @@ describe('interactivity', () => {
 
     assert.equal(response.status, 200)
     assert.equal(payload.albums.length, 0)
+  })
+})
+
+describe('streaming ui with frames', () => {
+  it('renders the recommendations region without the document shell', async () => {
+    let response = await router.fetch(
+      request(routes.albums.recommendations.href({ slug: 'kind-of-blue' })),
+    )
+    let html = await response.text()
+
+    assert.equal(response.status, 200)
+    assert.match(response.headers.get('content-type') ?? '', /text\/html/)
+    assert.match(html, /Because you opened Kind of Blue/)
+    // The region belongs inside another page, so it must not carry the shell.
+    assert.equal(html.includes('<html'), false)
+    assert.equal(html.includes('aria-label="Primary"'), false)
+  })
+
+  it('never recommends the album the region belongs to', async () => {
+    let response = await router.fetch(
+      request(routes.albums.recommendations.href({ slug: 'kind-of-blue' })),
+    )
+    let html = await response.text()
+
+    assert.equal(html.includes(`href="${routes.albums.show.href({ slug: 'kind-of-blue' })}"`), false)
+    assert.match(html, /href="\/albums\//)
+  })
+
+  it('returns a small 404 response for a missing album region', async () => {
+    let response = await router.fetch(
+      request(routes.albums.recommendations.href({ slug: 'missing-album' })),
+    )
+
+    assert.equal(response.status, 404)
+    assert.equal(await response.text(), 'Album not found')
+  })
+
+  it('registers a named, pending frame on the album detail page', async () => {
+    let response = await router.fetch(request(routes.albums.show.href({ slug: 'kind-of-blue' })))
+    let html = await response.text()
+    let frames = Object.values(rmxData(html).f ?? {})
+    let recommendations = frames.find((frame) => frame.name === 'album-recommendations')
+
+    assert.ok(recommendations, 'expected a frame named album-recommendations')
+    assert.equal(recommendations.src, routes.albums.recommendations.href({ slug: 'kind-of-blue' }))
+    // The fallback makes the frame non-blocking, so the marker starts pending.
+    assert.equal(recommendations.status, 'pending')
+  })
+
+  it('streams the fallback first and the resolved region later in the same response', async () => {
+    let response = await router.fetch(request(routes.albums.show.href({ slug: 'kind-of-blue' })))
+    let html = await response.text()
+
+    let fallbackAt = html.indexOf('Loading recommendations…')
+    let regionAt = html.indexOf('Because you opened Kind of Blue')
+
+    assert.ok(fallbackAt >= 0, 'expected the fallback in the initial HTML')
+    assert.ok(regionAt > fallbackAt, 'expected the region to stream after the fallback')
+    // Deferred frame content arrives as a template chunk, not in place.
+    assert.match(html, /<template id="/)
+  })
+
+  it('targets the named frame from links inside the region', async () => {
+    let response = await router.fetch(
+      request(routes.albums.recommendations.href({ slug: 'kind-of-blue' })),
+    )
+    let html = await response.text()
+
+    assert.match(html, /rmx-target="album-recommendations"/)
+    assert.match(html, /rmx-src="\/albums\/[^"]+\/recommendations"/)
+    // The public destination stays in href for runtimes that never start.
+    assert.match(html, /href="\/albums\/(rumours|miseducation)"/)
+  })
+
+  it('hydrates the refresher island with the frame name it reloads', async () => {
+    let response = await router.fetch(request(routes.albums.show.href({ slug: 'kind-of-blue' })))
+    let entries = clientEntries(await response.text())
+    let refresher = entries.find((entry) => entry.exportName === 'RecommendationsRefresher')
+
+    assert.ok(refresher, 'expected the refresher client entry')
+    assert.equal(refresher.props.frameName, 'album-recommendations')
+    assert.match(refresher.moduleUrl, /recommendations-refresher/)
   })
 })

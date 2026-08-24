@@ -1,11 +1,12 @@
 import type { Handle, RemixNode } from 'remix/ui'
-import { css } from 'remix/ui'
+import { css, Frame } from 'remix/ui'
 import button from 'remix/ui/button'
 import input from 'remix/ui/input'
 
 import { AlbumPreview } from '../assets/album-preview.tsx'
 import { AlbumSearch } from '../assets/album-search.tsx'
 import { QueuePanel } from '../assets/queue-panel.tsx'
+import { RecommendationsRefresher } from '../assets/recommendations-refresher.tsx'
 import type { Album } from '../data/albums.ts'
 import type { AlbumFieldErrors, AlbumFormValues } from '../data/validation.ts'
 import { routes } from '../routes.ts'
@@ -191,6 +192,26 @@ export function AlbumDetailPage(handle: Handle<{ album: Album }>) {
             </form>
           </div>
         </article>
+
+        <section mix={sectionStyle}>
+          <div mix={sectionHeaderStyle}>
+            <div>
+              <p mix={eyebrowStyle}>Route-owned region</p>
+              <h2 mix={headingStyle}>Recommendations</h2>
+            </div>
+            <RecommendationsRefresher frameName="album-recommendations" />
+          </div>
+          {/*
+           * The region has its own GET route. Without the fallback this frame
+           * would block the initial HTML; with it the page streams first and
+           * the recommendations replace the placeholder when they resolve.
+           */}
+          <Frame
+            name="album-recommendations"
+            src={routes.albums.recommendations.href({ slug: album.slug })}
+            fallback={<p mix={leadStyle}>Loading recommendations…</p>}
+          />
+        </section>
       </AppShell>
     )
   }
