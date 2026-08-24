@@ -1,4 +1,5 @@
 import { clientEntry, css, on, type Handle, type SerializableProps } from 'remix/ui'
+import { spring } from 'remix/ui/animation'
 
 interface AlbumPreviewProps extends SerializableProps {
   title: string
@@ -57,6 +58,9 @@ const previewStyle = css({
     outline: 'none',
     transform: 'translateY(-1px)',
   },
+  '@media (prefers-reduced-motion: reduce)': {
+    transition: 'none',
+  },
 })
 
 const discStyle = css({
@@ -66,7 +70,12 @@ const discStyle = css({
   borderRadius: '50%',
   display: 'flex',
   justifyContent: 'center',
-  transition: 'transform 220ms ease',
+  // A spring rendered down to a CSS `linear(...)` easing, so the disc snaps
+  // with physics even though the animation itself is a plain CSS transition.
+  transition: spring.transition('transform', 'bouncy'),
+  '@media (prefers-reduced-motion: reduce)': {
+    transition: 'none',
+  },
   '& span': {
     background: '#f8fafc',
     borderRadius: '50%',

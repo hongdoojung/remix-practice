@@ -39,6 +39,15 @@ export class ShelfQueue extends TypedEventTarget<{ change: Event }> {
     this.dispatchEvent(new Event('change'))
   }
 
+  /** Moves an entry to the front of the queue so it plays next. */
+  promote(slug: string): void {
+    let entry = this.#entries.find((item) => item.slug === slug)
+    if (!entry || this.#entries[0] === entry) return
+
+    this.#entries = [entry, ...this.#entries.filter((item) => item.slug !== slug)]
+    this.dispatchEvent(new Event('change'))
+  }
+
   remove(slug: string): void {
     let next = this.#entries.filter((entry) => entry.slug !== slug)
     if (next.length === this.#entries.length) return

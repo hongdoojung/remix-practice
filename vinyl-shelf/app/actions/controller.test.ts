@@ -458,3 +458,45 @@ describe('streaming ui with frames', () => {
     assert.match(refresher.moduleUrl, /recommendations-refresher/)
   })
 })
+
+describe('animation', () => {
+  it('ships spring physics as a plain CSS linear() transition', async () => {
+    let response = await router.fetch(request(routes.home.href()))
+    let html = await response.text()
+
+    // spring.transition('transform', 'bouncy') renders into the collected
+    // component styles on the server; no JavaScript needs to run first.
+    assert.match(html, /transition:\s*transform [^;<]*linear\(/)
+  })
+
+  it('respects prefers-reduced-motion in server-rendered styles', async () => {
+    let response = await router.fetch(request(routes.home.href()))
+    let html = await response.text()
+
+    assert.match(html, /@media \(prefers-reduced-motion: reduce\)/)
+    assert.match(html, /transition:\s*none/)
+  })
+
+  it('serves the motion helpers as a browser module', async () => {
+    let response = await router.fetch(
+      request(routes.assets.href({ path: 'app/assets/motion.ts' })),
+    )
+    let source = await response.text()
+
+    assert.equal(response.status, 200)
+    assert.match(response.headers.get('content-type') ?? '', /javascript/)
+    assert.match(source, /prefers-reduced-motion/)
+  })
+
+  it('keeps the animated queue panel a server-renderable client entry', async () => {
+    let response = await router.fetch(request(routes.albums.index.href()))
+    let html = await response.text()
+    let names = clientEntries(html)
+      .map((entry) => entry.exportName)
+      .sort()
+
+    // The animation mixins may not break server rendering or grow the
+    // hydration surface beyond the same two islands as before.
+    assert.deepEqual(names, ['AlbumSearch', 'QueuePanel'])
+  })
+})

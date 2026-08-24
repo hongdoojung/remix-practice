@@ -506,6 +506,17 @@ const cardStyle = css({
   display: 'grid',
   gap: '10px',
   padding: '18px',
+  // CSS-first motion: hover and focus are browser-owned states, so the lift
+  // needs no JavaScript and works before any hydration.
+  transition: 'transform 160ms ease, box-shadow 160ms ease',
+  '&:hover, &:focus-within': {
+    boxShadow: '0 12px 32px rgba(15, 17, 21, 0.10)',
+    transform: 'translateY(-2px)',
+  },
+  '@media (prefers-reduced-motion: reduce)': {
+    transition: 'none',
+    transform: 'none',
+  },
   '& h3, & p': { margin: 0 },
   '& p': { color: 'var(--shelf-muted)' },
   '& a': { color: 'var(--shelf-link)', fontWeight: 800, textDecoration: 'none' },

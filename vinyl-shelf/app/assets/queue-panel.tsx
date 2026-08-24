@@ -3,12 +3,15 @@ import {
   clientEntry,
   css,
   on,
+  ref,
   type Handle,
   type SerializableProps,
 } from 'remix/ui'
+import { animateEntrance, animateExit, animateLayout, spring } from 'remix/ui/animation'
 import button from 'remix/ui/button'
 
 import { longPress, longPressType } from './long-press.tsx'
+import { countUp, prefersReducedMotion } from './motion.ts'
 import { ShelfQueue } from './shelf-queue.ts'
 
 // A type alias, not an interface: client entry props must satisfy the
@@ -29,11 +32,30 @@ export const QueuePanel = clientEntry(
     let queue = new ShelfQueue()
     let statusOpen = false
 
+    // The rendered play count trails the model so it can count up. tween is
+    // for numbers like this one that are not CSS properties.
+    let shownPlays = 0
+    let cancelCount: (() => void) | undefined
+    let clearButton: HTMLButtonElement | undefined
+    let pressAnimation: Animation | undefined
+
     // `handle.signal` aborts when this component disconnects, so the
     // subscription cannot outlive the component.
     addEventListeners(queue, handle.signal, {
       change() {
-        handle.update()
+        let target = queue.playCount
+        cancelCount?.()
+
+        if (target === shownPlays || prefersReducedMotion()) {
+          shownPlays = target
+          handle.update()
+          return
+        }
+
+        cancelCount = countUp(shownPlays, target, (value) => {
+          shownPlays = Math.round(value)
+          handle.update()
+        })
       },
     })
 
@@ -55,12 +77,21 @@ export const QueuePanel = clientEntry(
                 }),
               ]}
             >
-              {queue.playCount} plays
+              {shownPlays} plays
             </button>
           </header>
 
           {statusOpen ? (
-            <p mix={noteStyle}>
+            // The stable key tells the runtime this exact node is entering and
+            // exiting, so animateExit can hold it in the DOM until it fades.
+            <p
+              key="status-note"
+              mix={[
+                noteStyle,
+                animateEntrance({ opacity: 0, transform: 'translateY(6px)', ...spring('snappy') }),
+                animateExit({ opacity: 0, transform: 'translateY(-6px)', ...spring('snappy') }),
+              ]}
+            >
               This panel is the only hydrated part of the page. The queue itself is plain
               TypeScript in <code>shelf-queue.ts</code>.
             </p>
@@ -85,18 +116,38 @@ export const QueuePanel = clientEntry(
           ) : (
             <>
               <ol mix={queuedStyle}>
-                {entries.map((entry) => (
-                  <li key={entry.slug}>
+                {entries.map((entry, index) => (
+                  // The slug key is what lets animateLayout tell "this entry
+                  // moved" apart from "a different entry replaced it".
+                  <li
+                    key={entry.slug}
+                    mix={[
+                      animateEntrance({ opacity: 0, transform: 'translateX(-8px)', ...spring('snappy') }),
+                      animateExit({ opacity: 0, transform: 'translateX(8px)', ...spring('snappy') }),
+                      animateLayout({ ...spring('bouncy') }),
+                    ]}
+                  >
                     <span>
                       {entry.title} × {entry.plays}
                     </span>
-                    <button
-                      type="button"
-                      aria-label={`Remove ${entry.title}`}
-                      mix={[button({ tone: 'ghost' }), on('click', () => queue.remove(entry.slug))]}
-                    >
-                      ✕
-                    </button>
+                    <span mix={entryActionsStyle}>
+                      {index > 0 ? (
+                        <button
+                          type="button"
+                          aria-label={`Play ${entry.title} next`}
+                          mix={[button({ tone: 'ghost' }), on('click', () => queue.promote(entry.slug))]}
+                        >
+                          ↑
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        aria-label={`Remove ${entry.title}`}
+                        mix={[button({ tone: 'ghost' }), on('click', () => queue.remove(entry.slug))]}
+                      >
+                        ✕
+                      </button>
+                    </span>
                   </li>
                 ))}
               </ol>
@@ -104,7 +155,18 @@ export const QueuePanel = clientEntry(
                 type="button"
                 mix={[
                   button({ tone: 'ghost' }),
+                  ref((element) => (clearButton = element)),
                   longPress(),
+                  // Interruptible imperative animation: cancel the in-flight
+                  // press before starting the next one.
+                  on('pointerdown', () => {
+                    if (prefersReducedMotion()) return
+                    pressAnimation?.cancel()
+                    pressAnimation = clearButton?.animate(
+                      [{ transform: 'scale(0.94)' }, { transform: 'scale(1)' }],
+                      { ...spring('snappy') },
+                    )
+                  }),
                   on(longPressType, () => queue.clear()),
                 ]}
               >
@@ -171,5 +233,7 @@ const queuedStyle = css({
     justifyContent: 'space-between',
   },
 })
+
+const entryActionsStyle = css({ display: 'inline-flex', gap: '4px' })
 
 const emptyStyle = css({ color: 'var(--shelf-muted)', margin: 0 })
