@@ -60,6 +60,14 @@ export function createAlbum(input: CreateAlbumInput) {
   return { ...album }
 }
 
+export function updateAlbum(slug: string, input: CreateAlbumInput) {
+  let album = albums.find((item) => item.slug === slug)
+  if (!album) return undefined
+
+  Object.assign(album, input)
+  return { ...album }
+}
+
 export function resetAlbumsForTest() {
   albums = seedAlbums.map((album) => ({ ...album }))
 }

@@ -31,7 +31,7 @@ export function HomePage(handle: Handle<{ albums: Album[] }>) {
               server-rendered UI, form actions, and selective hydration.
             </p>
             <div mix={actionRowStyle}>
-              <a href={routes.albums.href()} mix={primaryLinkStyle}>
+              <a href={routes.albums.index.href()} mix={primaryLinkStyle}>
                 Browse albums
               </a>
               <a href="https://guides.remix.run/start-here/" mix={plainLinkStyle}>
@@ -101,7 +101,7 @@ export function AlbumsPage(
         </section>
 
         <section mix={splitStyle}>
-          <form method="post" action={routes.albumsAction.href()} mix={panelStyle}>
+          <form method="post" action={routes.albums.create.href()} mix={panelStyle}>
             <h2 mix={headingStyle}>Add album</h2>
             <TextField name="title" label="Title" value={values.title} error={errors.title} />
             <TextField name="artist" label="Artist" value={values.artist} error={errors.artist} />
@@ -151,6 +151,14 @@ export function AlbumDetailPage(handle: Handle<{ album: Album }>) {
               <dd>server data</dd>
             </div>
           </dl>
+          <div mix={actionRowStyle}>
+            <a href={routes.albums.edit.index.href({ slug: album.slug })} mix={primaryLinkStyle}>
+              Edit album
+            </a>
+            <a href={routes.albums.index.href()} mix={plainLinkStyle}>
+              Back to albums
+            </a>
+          </div>
         </article>
       </AppShell>
     )
@@ -164,7 +172,7 @@ export function NotFoundPage(handle: Handle<{ slug: string }>) {
         <p mix={eyebrowStyle}>404 response</p>
         <h1 mix={titleStyle}>Album not found</h1>
         <p mix={leadStyle}>No album exists for the route param "{handle.props.slug}".</p>
-        <a href={routes.albums.href()} mix={primaryLinkStyle}>
+        <a href={routes.albums.index.href()} mix={primaryLinkStyle}>
           Back to albums
         </a>
       </section>
@@ -191,7 +199,7 @@ function AppShell(
               Start
             </a>
             <a
-              href={routes.albums.href()}
+              href={routes.albums.index.href()}
               aria-current={activePath === '/albums' ? 'page' : undefined}
             >
               Albums
@@ -215,7 +223,7 @@ function AlbumGrid(handle: Handle<{ albums: Album[] }>) {
           </p>
           <h3>{album.title}</h3>
           <p>{album.artist}</p>
-          <a href={routes.album.href({ slug: album.slug })}>Open detail</a>
+          <a href={routes.albums.show.href({ slug: album.slug })}>Open detail</a>
         </article>
       ))}
     </div>
