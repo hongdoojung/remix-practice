@@ -8,10 +8,12 @@ import albumsEditController from './actions/albums/edit/controller.tsx'
 import controller from './actions/controller.tsx'
 import { requestId } from './middleware/request-id.ts'
 import { render } from './middleware/render.tsx'
+import { serverTiming } from './middleware/server-timing.ts'
 import { routes } from './routes.ts'
 
 export const router = createRouter({
   middleware: [
+    serverTiming(),
     staticFiles('./public', { index: false }),
     requestId(),
     formData(),
