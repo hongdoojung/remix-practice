@@ -16,7 +16,10 @@ export default createController(routes, {
       return context.render(<HomePage albums={listAlbums()} />)
     },
     apiAlbums(context) {
-      return new Response(JSON.stringify({ albums: listAlbums(), requestId: context.requestId }), {
+      let elapsedMs = performance.now() - context.startedAt
+      let body = { albums: listAlbums(), requestId: context.requestId, elapsedMs }
+
+      return new Response(JSON.stringify(body), {
         headers: { 'Content-Type': 'application/json; charset=utf-8' },
       })
     },
