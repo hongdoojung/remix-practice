@@ -235,3 +235,27 @@ describe('rendering ui', () => {
     assert.match(html, /&lt;script&gt;/)
   })
 })
+
+describe('album list sorting', () => {
+  async function albumTitles(search: string) {
+    let response = await router.fetch(request(`${routes.albums.index.href()}${search}`))
+    let html = await response.text()
+
+    return [...html.matchAll(/<h3>([^<]+)<\/h3>/g)].map((match) => match[1])
+  }
+
+  it('orders the list by year, newest first, for ?sort=year', async () => {
+    assert.deepEqual(await albumTitles('?sort=year'), [
+      'The Miseducation of Lauryn Hill',
+      'Rumours',
+      'Kind of Blue',
+    ])
+  })
+
+  it('falls back to shelf order for a missing or unknown sort value', async () => {
+    let shelfOrder = ['Kind of Blue', 'Rumours', 'The Miseducation of Lauryn Hill']
+
+    assert.deepEqual(await albumTitles(''), shelfOrder)
+    assert.deepEqual(await albumTitles('?sort=bogus'), shelfOrder)
+  })
+})

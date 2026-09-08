@@ -44,8 +44,19 @@ const seedAlbums: Album[] = [
 
 let albums: Album[] = seedAlbums.map((album) => ({ ...album }))
 
-export function listAlbums() {
-  return albums.map((album) => ({ ...album }))
+export type AlbumSort = 'shelf' | 'title' | 'year'
+
+export function parseAlbumSort(value: string | null): AlbumSort {
+  return value === 'title' || value === 'year' ? value : 'shelf'
+}
+
+export function listAlbums(sort: AlbumSort = 'shelf') {
+  let list = albums.map((album) => ({ ...album }))
+
+  if (sort === 'title') list.sort((a, b) => a.title.localeCompare(b.title))
+  if (sort === 'year') list.sort((a, b) => b.year - a.year)
+
+  return list
 }
 
 export function getAlbum(slug: string) {
