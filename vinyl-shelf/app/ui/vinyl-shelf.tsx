@@ -4,7 +4,7 @@ import button from 'remix/ui/button'
 import input from 'remix/ui/input'
 
 import { AlbumPreview } from '../assets/album-preview.tsx'
-import type { Album } from '../data/albums.ts'
+import type { Album, AlbumSort } from '../data/albums.ts'
 import type { AlbumFieldErrors, AlbumFormValues } from '../data/validation.ts'
 import { routes } from '../routes.ts'
 import { Document } from './document.tsx'
@@ -89,12 +89,13 @@ export function HomePage(handle: Handle<{ albums: Album[] }>) {
 export function AlbumsPage(
   handle: Handle<{
     albums: Album[]
+    sort?: AlbumSort
     errors?: AlbumFieldErrors
     values?: AlbumFormValues
   }>,
 ) {
   return () => {
-    let { albums, errors = {}, values = emptyValues } = handle.props
+    let { albums, sort = 'shelf', errors = {}, values = emptyValues } = handle.props
 
     return (
       <AppShell
@@ -113,6 +114,7 @@ export function AlbumsPage(
               View JSON
             </a>
           </div>
+          <SortForm sort={sort} />
         </section>
 
         <section mix={splitStyle}>
@@ -263,6 +265,32 @@ function PrimaryNav(handle: Handle) {
       )}
     </nav>
   )
+}
+
+function SortForm(handle: Handle<{ sort: AlbumSort }>) {
+  return () => {
+    let { sort } = handle.props
+
+    return (
+      <form method="get" action={routes.albums.index.href()} mix={sortFormStyle}>
+        <label htmlFor={handle.id}>Sort by</label>
+        <select id={handle.id} name="sort" mix={sortSelectStyle}>
+          <option value="shelf" selected={sort === 'shelf'}>
+            Shelf order
+          </option>
+          <option value="title" selected={sort === 'title'}>
+            Title
+          </option>
+          <option value="year" selected={sort === 'year'}>
+            Year (newest first)
+          </option>
+        </select>
+        <button type="submit" class="shelf-cta" mix={button({ tone: 'primary' })}>
+          Apply
+        </button>
+      </form>
+    )
+  }
 }
 
 function AlbumGrid(handle: Handle<{ albums: Album[] }>) {
@@ -509,6 +537,20 @@ const fieldStyle = css({
     font: 'inherit',
     padding: '10px 12px',
   },
+})
+const sortFormStyle = css({
+  alignItems: 'center',
+  display: 'flex',
+  gap: '8px',
+  '& label': { fontWeight: 800 },
+})
+const sortSelectStyle = css({
+  background: 'var(--shelf-surface)',
+  border: '1px solid var(--shelf-field-line)',
+  borderRadius: 'var(--shelf-radius-sm)',
+  color: 'var(--shelf-ink)',
+  font: 'inherit',
+  padding: '8px 10px',
 })
 const dangerButtonStyle = css({
   background: 'var(--shelf-danger)',
