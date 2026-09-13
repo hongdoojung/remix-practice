@@ -1,10 +1,13 @@
 import * as assert from 'remix/assert'
+import { DataTableValidationError } from 'remix/data-table'
 // `remix/test` registers suites for the `remix test` runner, which needs
 // playwright. This app runs `node --test`, so the suite uses the node test
 // runner directly and keeps `remix/assert` for assertions.
 import { beforeEach, describe, it } from 'node:test'
 
 import { resetAlbumsForTest } from '../data/albums.ts'
+import { db } from '../data/database.ts'
+import { albums } from '../data/schema.ts'
 import { router } from '../router.ts'
 import { routes } from '../routes.ts'
 
@@ -12,8 +15,8 @@ function request(path: string, init?: RequestInit) {
   return new Request(`http://local.test${path}`, init)
 }
 
-beforeEach(() => {
-  resetAlbumsForTest()
+beforeEach(async () => {
+  await resetAlbumsForTest(db)
 })
 
 describe('start here practice routes', () => {
@@ -456,6 +459,162 @@ describe('streaming ui with frames', () => {
     assert.ok(refresher, 'expected the refresher client entry')
     assert.equal(refresher.props.frameName, 'album-recommendations')
     assert.match(refresher.moduleUrl, /recommendations-refresher/)
+  })
+})
+
+describe('data and validation', () => {
+  it('persists a form submission as a database row', async () => {
+    let response = await router.fetch(
+      request(routes.albums.create.href(), {
+        method: 'POST',
+        body: new URLSearchParams({
+          title: '  In Rainbows  ',
+          artist: 'Radiohead',
+          year: '2007',
+          genre: 'Art rock',
+          notes: 'Written through the request schema, stored through the table.',
+        }),
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      }),
+    )
+    assert.equal(response.status, 303)
+
+    // beforeWrite trimmed the padded title before the row was stored.
+    let row = await db.findOne(albums, { where: { slug: 'in-rainbows' } })
+    assert.ok(row, 'expected the album row in the database')
+    assert.equal(row.title, 'In Rainbows')
+    assert.equal(row.year, 2007)
+  })
+
+  it('reports schema issues per field with the form untouched', async () => {
+    let response = await router.fetch(
+      request(routes.albums.edit.action.href({ slug: 'kind-of-blue' }), {
+        method: 'POST',
+        body: new URLSearchParams({
+          title: '',
+          artist: '',
+          year: '1959',
+          genre: 'Modal jazz',
+          notes: 'Validation check.',
+        }),
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Accept: 'application/json',
+        },
+      }),
+    )
+    let payload = (await response.json()) as { errors: Record<string, string> }
+
+    assert.equal(response.status, 400)
+    assert.equal(payload.errors.title, 'Title is required')
+    assert.equal(payload.errors.artist, 'Artist is required')
+    assert.equal(payload.errors.year, undefined)
+  })
+
+  it('enforces persistence invariants for every caller, not just the form', async () => {
+    // This write skips the request schema entirely: the table hook is the
+    // last line of defense.
+    await assert.rejects(
+      db.create(albums, {
+        slug: 'bad-year',
+        title: 'Bad Year',
+        artist: 'Nobody',
+        year: 1200,
+        genre: 'None',
+        notes: 'Should never be stored.',
+      }),
+      (error: unknown) => {
+        // The thrown message names the column; the hook's own message stays on
+        // `issues`, which is what a caller would show a user.
+        assert.ok(error instanceof DataTableValidationError)
+        assert.equal(error.metadata?.column, 'year')
+        assert.ok(
+          error.issues.some(
+            (issue) =>
+              typeof (issue as { message?: unknown }).message === 'string' &&
+              /year must be an integer between 1900 and 2100/.test(
+                (issue as { message: string }).message,
+              ),
+          ),
+        )
+        return true
+      },
+    )
+
+    let row = await db.findOne(albums, { where: { slug: 'bad-year' } })
+    assert.equal(row, null)
+  })
+
+  it('generates unique slugs at the data layer', async () => {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      let response = await router.fetch(
+        request(routes.albums.create.href(), {
+          method: 'POST',
+          body: new URLSearchParams({
+            title: 'Kind of Blue',
+            artist: 'Cover Band',
+            year: '2020',
+            genre: 'Jazz',
+            notes: 'Same title as a seed album.',
+          }),
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        }),
+      )
+      assert.equal(response.status, 303)
+    }
+
+    assert.ok(await db.findOne(albums, { where: { slug: 'kind-of-blue-2' } }))
+    assert.ok(await db.findOne(albums, { where: { slug: 'kind-of-blue-3' } }))
+  })
+
+  it('rolls back every write in a transaction when one of them fails', async () => {
+    await assert.rejects(
+      db.transaction(async (tx) => {
+        await tx.create(albums, {
+          slug: 'half-written',
+          title: 'Half Written',
+          artist: 'Nobody',
+          year: 2020,
+          genre: 'None',
+          notes: 'The second write in this transaction fails.',
+        })
+
+        // Rejected by the table validate hook, which does not roll anything
+        // back on its own — the transaction does.
+        await tx.create(albums, {
+          slug: 'bad-year',
+          title: 'Bad Year',
+          artist: 'Nobody',
+          year: 1200,
+          genre: 'None',
+          notes: 'Should never be stored.',
+        })
+      }),
+    )
+
+    assert.equal(await db.findOne(albums, { where: { slug: 'half-written' } }), null)
+  })
+
+  it('lists newest albums first from the database ordering', async () => {
+    await router.fetch(
+      request(routes.albums.create.href(), {
+        method: 'POST',
+        body: new URLSearchParams({
+          title: 'Newest',
+          artist: 'Test',
+          year: '2024',
+          genre: 'Test',
+          notes: 'Ordering check.',
+        }),
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      }),
+    )
+
+    let response = await router.fetch(request(routes.apiAlbums.href()))
+    let payload = (await response.json()) as { albums: Array<{ title: string }> }
+
+    assert.equal(payload.albums[0]?.title, 'Newest')
+    assert.equal(payload.albums[1]?.title, 'Kind of Blue')
   })
 })
 

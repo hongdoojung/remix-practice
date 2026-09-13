@@ -9,15 +9,15 @@ import { AlbumEditPage } from './page.tsx'
 
 export default createController(routes.albums.edit, {
   actions: {
-    index(context) {
-      let album = getAlbum(context.params.slug)
+    async index(context) {
+      let album = await getAlbum(context.db, context.params.slug)
       if (!album) {
         return context.render(<NotFoundPage slug={context.params.slug} />, { status: 404 })
       }
 
       return context.render(<AlbumEditPage album={album} />)
     },
-    action(context) {
+    async action(context) {
       let result = validateCreateAlbum(context.formData)
 
       if (!result.ok) {
@@ -30,7 +30,7 @@ export default createController(routes.albums.edit, {
           })
         }
 
-        let album = getAlbum(context.params.slug)
+        let album = await getAlbum(context.db, context.params.slug)
         if (!album) {
           return context.render(<NotFoundPage slug={context.params.slug} />, { status: 404 })
         }
@@ -40,7 +40,7 @@ export default createController(routes.albums.edit, {
         })
       }
 
-      let album = updateAlbum(context.params.slug, result.value)
+      let album = await updateAlbum(context.db, context.params.slug, result.value)
       if (!album) {
         return context.render(<NotFoundPage slug={context.params.slug} />, { status: 404 })
       }

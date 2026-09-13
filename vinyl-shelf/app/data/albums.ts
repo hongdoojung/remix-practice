@@ -1,11 +1,8 @@
-export interface Album {
-  slug: string
-  title: string
-  artist: string
-  year: number
-  genre: string
-  notes: string
-}
+import type { Database } from 'remix/data-table'
+
+import { albums, type AlbumRow } from './schema.ts'
+
+export type Album = AlbumRow
 
 export interface CreateAlbumInput {
   title: string
@@ -15,7 +12,7 @@ export interface CreateAlbumInput {
   notes: string
 }
 
-const seedAlbums: Album[] = [
+const seedAlbums: Omit<Album, 'id'>[] = [
   {
     slug: 'kind-of-blue',
     title: 'Kind of Blue',
@@ -42,36 +39,37 @@ const seedAlbums: Album[] = [
   },
 ]
 
-let albums: Album[] = seedAlbums.map((album) => ({ ...album }))
-
-export function listAlbums() {
-  return albums.map((album) => ({ ...album }))
+export function listAlbums(db: Database) {
+  // Newest first: form-created albums get higher ids than the seeds.
+  return db.findMany(albums, { orderBy: ['id', 'desc'] })
 }
 
-export function getAlbum(slug: string) {
-  let album = albums.find((item) => item.slug === slug)
-  return album ? { ...album } : undefined
+export function getAlbum(db: Database, slug: string) {
+  return db.findOne(albums, { where: { slug } })
 }
 
-export function createAlbum(input: CreateAlbumInput) {
-  let slug = uniqueSlug(input.title)
-  let album: Album = { slug, ...input }
-  albums.unshift(album)
-  return { ...album }
+export async function createAlbum(db: Database, input: CreateAlbumInput) {
+  // The slug is chosen by reading the rows that already exist, so the read and
+  // the insert have to commit together. Two creates with the same title would
+  // otherwise both pick the same suffix and one would hit the unique index.
+  return db.transaction(async (tx) => {
+    let slug = await uniqueSlug(tx, input.title)
+    return tx.create(albums, { slug, ...input }, { returnRow: true })
+  })
 }
 
-export function updateAlbum(slug: string, input: CreateAlbumInput) {
-  let album = albums.find((item) => item.slug === slug)
-  if (!album) return undefined
+export async function updateAlbum(db: Database, slug: string, input: CreateAlbumInput) {
+  let album = await getAlbum(db, slug)
+  if (!album) return null
 
-  Object.assign(album, input)
-  return { ...album }
+  return db.update(albums, album.id, input)
 }
 
-export function deleteAlbum(slug: string) {
-  let before = albums.length
-  albums = albums.filter((album) => album.slug !== slug)
-  return albums.length < before
+export async function deleteAlbum(db: Database, slug: string) {
+  let album = await getAlbum(db, slug)
+  if (!album) return false
+
+  return db.delete(albums, album.id)
 }
 
 /**
@@ -79,11 +77,11 @@ export function deleteAlbum(slug: string) {
  * lives behind its own GET route, so the detail page can stream it in a frame
  * and reload it without re-rendering the rest of the page.
  */
-export function getRecommendations(album: Album) {
+export async function getRecommendations(db: Database, album: Album) {
   let genreWords = album.genre.toLowerCase().split(/\s+/)
   let decade = Math.floor(album.year / 10)
 
-  let others = albums.filter((candidate) => candidate.slug !== album.slug)
+  let others = (await listAlbums(db)).filter((candidate) => candidate.slug !== album.slug)
   let related = others.filter((candidate) => {
     let candidateGenre = candidate.genre.toLowerCase()
     let sharesGenre = genreWords.some((word) => candidateGenre.includes(word))
@@ -95,19 +93,30 @@ export function getRecommendations(album: Album) {
   // instead of rendering an empty region.
   let picks = related.length > 0 ? related : others
 
-  return picks.slice(0, 3).map((candidate) => ({ ...candidate }))
+  return picks.slice(0, 3)
 }
 
-export function resetAlbumsForTest() {
-  albums = seedAlbums.map((album) => ({ ...album }))
+export async function seedAlbumsIfEmpty(db: Database) {
+  let existing = await db.count(albums)
+  if (existing > 0) return
+
+  // Inserted in reverse so the id-descending list shows the seeds in their
+  // curated order while later form submissions still land on top.
+  await db.createMany(albums, [...seedAlbums].reverse())
 }
 
-function uniqueSlug(title: string) {
+export async function resetAlbumsForTest(db: Database) {
+  await db.exec('delete from albums')
+  await db.exec("delete from sqlite_sequence where name = 'albums'")
+  await seedAlbumsIfEmpty(db)
+}
+
+async function uniqueSlug(db: Database, title: string) {
   let base = slugify(title) || 'album'
   let slug = base
   let next = 2
 
-  while (albums.some((album) => album.slug === slug)) {
+  while (await getAlbum(db, slug)) {
     slug = `${base}-${next}`
     next++
   }

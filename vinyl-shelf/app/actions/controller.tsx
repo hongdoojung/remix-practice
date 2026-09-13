@@ -13,15 +13,15 @@ export default createController(routes, {
         (await assetServer.fetch(context.request)) ?? new Response('Not Found', { status: 404 })
       )
     },
-    home(context) {
-      return context.render(<HomePage albums={listAlbums()} />)
+    async home(context) {
+      return context.render(<HomePage albums={await listAlbums(context.db)} />)
     },
-    feed() {
-      return renderAlbumFeed(listAlbums())
+    async feed(context) {
+      return renderAlbumFeed(await listAlbums(context.db))
     },
-    apiAlbums(context) {
+    async apiAlbums(context) {
       let query = context.url.searchParams.get('query')?.trim().toLowerCase() ?? ''
-      let albums = listAlbums()
+      let albums = (await listAlbums(context.db))
         .filter(
           (album) =>
             query === '' ||

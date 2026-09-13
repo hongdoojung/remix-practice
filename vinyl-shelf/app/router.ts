@@ -6,6 +6,7 @@ import { staticFiles } from 'remix/middleware/static'
 import albumsController from './actions/albums/controller.tsx'
 import albumsEditController from './actions/albums/edit/controller.tsx'
 import controller from './actions/controller.tsx'
+import { loadDatabase } from './middleware/database.ts'
 import { requestId } from './middleware/request-id.ts'
 import { render } from './middleware/render.tsx'
 import { routes } from './routes.ts'
@@ -16,6 +17,7 @@ export const router = createRouter({
     requestId(),
     formData(),
     methodOverride(),
+    loadDatabase(),
     render(),
   ],
 })
