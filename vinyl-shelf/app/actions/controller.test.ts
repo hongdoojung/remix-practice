@@ -253,7 +253,7 @@ describe('interactivity', () => {
     let entries = clientEntries(await response.text())
     let names = entries.map((entry) => entry.exportName).sort()
 
-    assert.deepEqual(names, ['AlbumSearch', 'QueuePanel'])
+    assert.deepEqual(names, ['AlbumForm', 'AlbumSearch', 'QueuePanel'])
   })
 
   it('passes route URLs and serializable data to the hydrated search', async () => {
@@ -276,7 +276,7 @@ describe('interactivity', () => {
 
     assert.deepEqual(
       entries.map((entry) => entry.exportName),
-      ['AlbumEditForm'],
+      ['AlbumForm'],
     )
     // Progressive enhancement: the server-rendered markup is a real form
     // pointing at the same action the enhanced submit handler fetches.
@@ -341,6 +341,44 @@ describe('interactivity', () => {
     assert.equal(response.status, 400)
     assert.match(response.headers.get('content-type') ?? '', /text\/html/)
     assert.match(html, /Title is required/)
+  })
+
+  it('answers the enhanced create form with JSON errors and the submitted values', async () => {
+    let response = await router.fetch(
+      request(routes.albums.create.href(), {
+        method: 'POST',
+        body: new URLSearchParams({ title: '', artist: 'Nina Simone', year: '1965', genre: '', notes: '' }),
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Accept: 'application/json',
+        },
+      }),
+    )
+    let payload = (await response.json()) as {
+      errors: Record<string, string>
+      values: Record<string, string>
+    }
+
+    assert.equal(response.status, 400)
+    assert.equal(response.headers.get('content-type'), 'application/json; charset=utf-8')
+    assert.match(payload.errors.title ?? '', /required/)
+    assert.equal(payload.values.artist, 'Nina Simone')
+  })
+
+  it('still answers a plain create submission with the re-rendered albums page', async () => {
+    let response = await router.fetch(
+      request(routes.albums.create.href(), {
+        method: 'POST',
+        body: new URLSearchParams({ title: '', artist: 'Nina Simone', year: '1965', genre: '', notes: '' }),
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      }),
+    )
+    let html = await response.text()
+
+    assert.equal(response.status, 400)
+    assert.match(response.headers.get('content-type') ?? '', /text\/html/)
+    assert.match(html, /Title is required/)
+    assert.match(html, /value="Nina Simone"/)
   })
 
   it('filters the JSON route the search component fetches', async () => {

@@ -12,11 +12,13 @@ import input from 'remix/ui/input'
 
 type FieldName = 'title' | 'artist' | 'year' | 'genre' | 'notes'
 
-interface AlbumEditFormProps extends SerializableProps {
+interface AlbumFormProps extends SerializableProps {
   /** The same URL the non-enhanced form posts to. */
   actionHref: string
   values: Record<FieldName, string>
   errors: Partial<Record<FieldName, string>>
+  submitLabel: string
+  pendingLabel: string
 }
 
 const fields: Array<{ name: FieldName; label: string }> = [
@@ -26,9 +28,9 @@ const fields: Array<{ name: FieldName; label: string }> = [
   { name: 'genre', label: 'Genre' },
 ]
 
-export const AlbumEditForm = clientEntry(
+export const AlbumForm = clientEntry(
   import.meta.url,
-  function AlbumEditForm(handle: Handle<AlbumEditFormProps>) {
+  function AlbumForm(handle: Handle<AlbumFormProps>) {
     // UI state only. The controller still owns validation and the mutation.
     let pending = false
     let formError: string | undefined
@@ -116,7 +118,7 @@ export const AlbumEditForm = clientEntry(
           disabled={pending}
           mix={button({ tone: 'primary', size: 'lg' })}
         >
-          {pending ? 'Saving…' : 'Save changes'}
+          {pending ? handle.props.pendingLabel : handle.props.submitLabel}
         </button>
       </form>
     )

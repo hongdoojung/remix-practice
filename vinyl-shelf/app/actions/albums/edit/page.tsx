@@ -1,7 +1,7 @@
 import type { Handle } from 'remix/ui'
 import { css } from 'remix/ui'
 
-import { AlbumEditForm } from '../../../assets/album-edit-form.tsx'
+import { AlbumForm } from '../../../assets/album-form.tsx'
 import type { Album } from '../../../data/albums.ts'
 import type { AlbumFieldErrors, AlbumFormValues } from '../../../data/validation.ts'
 import { routes } from '../../../routes.ts'
@@ -44,10 +44,12 @@ export function AlbumEditPage(
               inline errors on top of the same route action a plain browser submission uses.
             </p>
 
-            <AlbumEditForm
+            <AlbumForm
               actionHref={routes.albums.edit.action.href({ slug: album.slug })}
               values={formValues}
               errors={errors}
+              submitLabel="Save changes"
+              pendingLabel="Saving…"
             />
           </section>
         </main>

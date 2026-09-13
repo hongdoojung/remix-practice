@@ -15,6 +15,13 @@ export default createController(routes.albums, {
       let result = validateCreateAlbum(context.formData)
 
       if (!result.ok) {
+        if (wantsJson(context.request)) {
+          return new Response(JSON.stringify({ errors: result.errors, values: result.values }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json; charset=utf-8' },
+          })
+        }
+
         return context.render(
           <AlbumsPage albums={listAlbums()} errors={result.errors} values={result.values} />,
           { status: 400 },
@@ -42,3 +49,7 @@ export default createController(routes.albums, {
     },
   },
 })
+
+function wantsJson(request: Request) {
+  return request.headers.get('Accept')?.includes('application/json') ?? false
+}
