@@ -15,6 +15,10 @@ export const albums = table({
     year: c.integer().notNull(),
     genre: c.text().notNull(),
     notes: c.text().notNull(),
+    // Bumped on every update so an edit form can say which version it was
+    // built from. Two people editing the same album no longer overwrite each
+    // other silently.
+    revision: c.integer().notNull().default(1),
   },
   // Persistence invariants run for every caller, not just the album form.
   // Request validation may be skipped by a future code path; this cannot.

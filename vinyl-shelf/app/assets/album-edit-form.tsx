@@ -17,6 +17,14 @@ interface AlbumEditFormProps extends SerializableProps {
   actionHref: string
   values: Record<FieldName, string>
   errors: Partial<Record<FieldName, string>>
+  /** The album revision this form was built from. Submitted back as a hidden field. */
+  revision: number
+  notice?: 'saved' | 'conflict'
+}
+
+const notices = {
+  saved: 'Saved. Keep editing or open the album.',
+  conflict: 'Someone else saved this album first. Your text is still here — submit again to keep it.',
 }
 
 const fields: Array<{ name: FieldName; label: string }> = [
@@ -34,6 +42,10 @@ export const AlbumEditForm = clientEntry(
     let formError: string | undefined
     let fieldErrors = handle.props.errors
     let alert: HTMLElement | undefined
+    // The server hands back a new revision after every successful save, so the
+    // next submission from this same page is not treated as stale.
+    let revision = handle.props.revision
+    let notice = handle.props.notice
 
     return () => (
       <form
@@ -47,18 +59,35 @@ export const AlbumEditForm = clientEntry(
 
             pending = true
             formError = undefined
+            notice = undefined
             fieldErrors = {}
             handle.update()
 
             try {
               let response = await fetch(form.action, {
-                body: new FormData(form),
+                // Passing the submitter keeps the pressed button's name/value in
+                // the body. `new FormData(form)` alone drops it, and the action
+                // would read every submission as the default intent.
+                body: new FormData(form, event.submitter),
                 method: form.method,
                 headers: { Accept: 'application/json' },
                 signal,
               })
 
               if (signal.aborted) return
+
+              if (response.ok && isJson(response)) {
+                // save-and-continue: the action stayed on this page and returned
+                // the revision the next submission has to carry.
+                let payload = (await response.json()) as { revision?: number }
+                if (signal.aborted) return
+
+                if (typeof payload.revision === 'number') revision = payload.revision
+                notice = 'saved'
+                pending = false
+                handle.update()
+                return
+              }
 
               if (response.ok) {
                 // The action answered with a redirect, which fetch followed.
@@ -67,7 +96,13 @@ export const AlbumEditForm = clientEntry(
                 return
               }
 
-              if (response.status === 400) {
+              if (response.status === 409) {
+                let payload = (await response.json()) as { revision?: number }
+                if (signal.aborted) return
+
+                if (typeof payload.revision === 'number') revision = payload.revision
+                notice = 'conflict'
+              } else if (response.status === 400) {
                 let payload = (await response.json()) as {
                   errors: Partial<Record<FieldName, string>>
                 }
@@ -98,6 +133,17 @@ export const AlbumEditForm = clientEntry(
           </p>
         ) : null}
 
+        {notice ? (
+          <p
+            role="status"
+            mix={notice === 'conflict' ? alertStyle : noticeStyle}
+          >
+            {notices[notice]}
+          </p>
+        ) : null}
+
+        <input type="hidden" name="revision" value={String(revision)} />
+
         {fields.map((field) => (
           <Field
             key={field.name}
@@ -110,18 +156,36 @@ export const AlbumEditForm = clientEntry(
 
         <NotesField value={handle.props.values.notes} error={fieldErrors.notes} />
 
-        <button
-          type="submit"
-          class="shelf-cta"
-          disabled={pending}
-          mix={button({ tone: 'primary', size: 'lg' })}
-        >
-          {pending ? 'Saving…' : 'Save changes'}
-        </button>
+        <div mix={actionsStyle}>
+          <button
+            type="submit"
+            name="intent"
+            value="save"
+            class="shelf-cta"
+            disabled={pending}
+            mix={button({ tone: 'primary', size: 'lg' })}
+          >
+            {pending ? 'Saving…' : 'Save changes'}
+          </button>
+
+          <button
+            type="submit"
+            name="intent"
+            value="save-and-continue"
+            disabled={pending}
+            mix={button({ size: 'lg' })}
+          >
+            Save and keep editing
+          </button>
+        </div>
       </form>
     )
   },
 )
+
+function isJson(response: Response) {
+  return response.headers.get('Content-Type')?.includes('application/json') ?? false
+}
 
 function Field(
   handle: Handle<{ name: FieldName; label: string; value: string; error?: string }>,
@@ -200,5 +264,17 @@ const alertStyle = css({
   margin: 0,
   padding: '10px 12px',
 })
+
+const noticeStyle = css({
+  background: '#eef7ee',
+  border: '1px solid #3f8f4f',
+  borderRadius: 'var(--shelf-radius-sm)',
+  color: '#2c6b39',
+  fontWeight: 700,
+  margin: 0,
+  padding: '10px 12px',
+})
+
+const actionsStyle = css({ display: 'flex', flexWrap: 'wrap', gap: '10px' })
 
 const errorStyle = css({ color: 'var(--shelf-danger)', fontWeight: 700 })

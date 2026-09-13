@@ -12,7 +12,8 @@ export interface CreateAlbumInput {
   notes: string
 }
 
-const seedAlbums: Omit<Album, 'id'>[] = [
+// `revision` is omitted so the column default starts every seed at 1.
+const seedAlbums: Omit<Album, 'id' | 'revision'>[] = [
   {
     slug: 'kind-of-blue',
     title: 'Kind of Blue',
@@ -58,11 +59,34 @@ export async function createAlbum(db: Database, input: CreateAlbumInput) {
   })
 }
 
-export async function updateAlbum(db: Database, slug: string, input: CreateAlbumInput) {
-  let album = await getAlbum(db, slug)
-  if (!album) return null
+export type UpdateAlbumResult =
+  | { ok: true; album: Album }
+  | { ok: false; reason: 'not-found' }
+  /** `album` is the row as it stands now, so the form can show what it lost. */
+  | { ok: false; reason: 'conflict'; album: Album }
 
-  return db.update(albums, album.id, input)
+/**
+ * Applies an edit only when the form was built from the album's current
+ * revision. Reading the revision and writing the new one must commit together,
+ * or two submissions could both pass the check.
+ */
+export async function updateAlbum(
+  db: Database,
+  slug: string,
+  expectedRevision: number,
+  input: CreateAlbumInput,
+): Promise<UpdateAlbumResult> {
+  return db.transaction(async (tx) => {
+    let album = await getAlbum(tx, slug)
+    if (!album) return { ok: false, reason: 'not-found' }
+    if (album.revision !== expectedRevision) return { ok: false, reason: 'conflict', album }
+
+    let updated = await tx.update(albums, album.id, {
+      ...input,
+      revision: album.revision + 1,
+    })
+    return { ok: true, album: updated }
+  })
 }
 
 export async function deleteAlbum(db: Database, slug: string) {

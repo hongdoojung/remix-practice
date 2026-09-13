@@ -1,4 +1,5 @@
 import * as s from 'remix/data-schema'
+import * as coerce from 'remix/data-schema/coerce'
 import * as f from 'remix/data-schema/form-data'
 
 import type { CreateAlbumInput } from './albums.ts'
@@ -9,6 +10,17 @@ export type AlbumFormValues = Record<'title' | 'artist' | 'year' | 'genre' | 'no
 
 export type CreateAlbumResult =
   | { ok: true; value: CreateAlbumInput }
+  | { ok: false; errors: AlbumFieldErrors; values: AlbumFormValues }
+
+export type EditAlbumResult =
+  /** `values` carries the submitted text as typed, for responses that re-render the form. */
+  | {
+      ok: true
+      value: CreateAlbumInput
+      values: AlbumFormValues
+      intent: SaveIntent
+      revision: number
+    }
   | { ok: false; errors: AlbumFieldErrors; values: AlbumFormValues }
 
 const fieldNames = ['title', 'artist', 'year', 'genre', 'notes'] as const
@@ -30,12 +42,34 @@ const yearField = s
   }, 'Year must be a number between 1900 and 2100')
   .transform((value) => Number(value.trim()))
 
-export const albumFormSchema = f.object({
+const albumFields = {
   title: f.field(requiredText('Title')),
   artist: f.field(requiredText('Artist')),
   year: f.field(yearField),
   genre: f.field(requiredText('Genre')),
   notes: f.field(requiredText('Notes')),
+}
+
+export const albumFormSchema = f.object(albumFields)
+
+export type SaveIntent = 'save' | 'save-and-continue'
+
+/**
+ * An unrecognized intent means a stale or edited form, not a typo the user can
+ * fix, so it collapses to the default action instead of becoming an error.
+ */
+const intentField = s
+  .defaulted(s.string(), 'save')
+  .transform((value): SaveIntent => (value === 'save-and-continue' ? 'save-and-continue' : 'save'))
+
+// A missing revision lands on 0, which matches no stored album, so the action
+// answers with a conflict instead of writing blind.
+const revisionField = s.defaulted(coerce.number(), 0).transform((value) => Math.trunc(value))
+
+export const albumEditFormSchema = f.object({
+  ...albumFields,
+  intent: f.field(intentField),
+  revision: f.field(revisionField),
 })
 
 /**
@@ -46,16 +80,35 @@ export function validateCreateAlbum(formData: FormData): CreateAlbumResult {
   let result = s.parseSafe(albumFormSchema, formData)
 
   if (!result.success) {
-    let errors: AlbumFieldErrors = {}
-    for (let issue of result.issues) {
-      let field = issueField(issue)
-      if (field && !errors[field]) errors[field] = issue.message
-    }
-
-    return { ok: false, errors, values: readValues(formData) }
+    return { ok: false, errors: collectFieldErrors(result.issues), values: readValues(formData) }
   }
 
   return { ok: true, value: result.value }
+}
+
+/**
+ * The edit form carries two extra hidden values: which button was pressed, and
+ * the revision the form was built from. Both belong to the same boundary parse
+ * as the album fields.
+ */
+export function validateEditAlbum(formData: FormData): EditAlbumResult {
+  let result = s.parseSafe(albumEditFormSchema, formData)
+
+  if (!result.success) {
+    return { ok: false, errors: collectFieldErrors(result.issues), values: readValues(formData) }
+  }
+
+  let { intent, revision, ...value } = result.value
+  return { ok: true, value, values: readValues(formData), intent, revision }
+}
+
+function collectFieldErrors(issues: readonly s.Issue[]): AlbumFieldErrors {
+  let errors: AlbumFieldErrors = {}
+  for (let issue of issues) {
+    let field = issueField(issue)
+    if (field && !errors[field]) errors[field] = issue.message
+  }
+  return errors
 }
 
 function issueField(issue: s.Issue): (typeof fieldNames)[number] | undefined {

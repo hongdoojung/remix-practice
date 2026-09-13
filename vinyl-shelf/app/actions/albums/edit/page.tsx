@@ -12,10 +12,11 @@ export function AlbumEditPage(
     album: Album
     errors?: AlbumFieldErrors
     values?: AlbumFormValues
+    notice?: 'saved' | 'conflict'
   }>,
 ) {
   return () => {
-    let { album, errors = {}, values } = handle.props
+    let { album, errors = {}, values, notice } = handle.props
     let formValues: AlbumFormValues = values ?? {
       title: album.title,
       artist: album.artist,
@@ -37,7 +38,7 @@ export function AlbumEditPage(
           </nav>
 
           <section mix={panelStyle}>
-            <p mix={eyebrowStyle}>Interactivity</p>
+            <p mix={eyebrowStyle}>Forms and Mutations</p>
             <h1>Edit album</h1>
             <p mix={leadStyle}>
               The page stays server-only. Just the form hydrates, so it can add pending state and
@@ -48,6 +49,8 @@ export function AlbumEditPage(
               actionHref={routes.albums.edit.action.href({ slug: album.slug })}
               values={formValues}
               errors={errors}
+              revision={album.revision}
+              notice={notice}
             />
           </section>
         </main>

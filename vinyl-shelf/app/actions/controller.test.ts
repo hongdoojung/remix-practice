@@ -102,6 +102,7 @@ describe('start here practice routes', () => {
           year: '1959',
           genre: 'Modal jazz',
           notes: 'Updated through a nested controller action.',
+          revision: '1',
         }),
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       }),
@@ -615,6 +616,116 @@ describe('data and validation', () => {
 
     assert.equal(payload.albums[0]?.title, 'Newest')
     assert.equal(payload.albums[1]?.title, 'Kind of Blue')
+  })
+})
+
+describe('forms and mutations', () => {
+  function editAlbum(fields: Record<string, string>, headers: Record<string, string> = {}) {
+    return router.fetch(
+      request(routes.albums.edit.action.href({ slug: 'kind-of-blue' }), {
+        method: 'POST',
+        body: new URLSearchParams({
+          title: 'Kind of Blue',
+          artist: 'Miles Davis',
+          year: '1959',
+          genre: 'Modal jazz',
+          notes: 'Edited.',
+          revision: '1',
+          ...fields,
+        }),
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', ...headers },
+      }),
+    )
+  }
+
+  it('renders the revision the form was built from as a hidden field', async () => {
+    let response = await router.fetch(
+      request(routes.albums.edit.index.href({ slug: 'kind-of-blue' })),
+    )
+    let html = await response.text()
+
+    assert.match(html, /<input type="hidden" name="revision" value="1"/)
+    // Both intents ship as real submit buttons, so they work without JavaScript.
+    assert.match(html, /name="intent" value="save"/)
+    assert.match(html, /name="intent" value="save-and-continue"/)
+  })
+
+  it('bumps the revision on every successful save', async () => {
+    assert.equal((await editAlbum({ intent: 'save' })).status, 303)
+
+    let album = await db.findOne(albums, { where: { slug: 'kind-of-blue' } })
+    assert.equal(album?.revision, 2)
+  })
+
+  it('rejects a second save built from a revision that is already stale', async () => {
+    assert.equal((await editAlbum({ notes: 'First writer wins.' })).status, 303)
+
+    // Same revision as the first submission: this form was built before that
+    // save landed.
+    let response = await editAlbum({ notes: 'Second writer is late.' })
+    let html = await response.text()
+
+    assert.equal(response.status, 409)
+    assert.match(html, /Someone else saved this album first/)
+    // The late writer keeps their text and gets the newer revision to resubmit.
+    assert.match(html, /Second writer is late\./)
+    assert.match(html, /<input type="hidden" name="revision" value="2"/)
+
+    let album = await db.findOne(albums, { where: { slug: 'kind-of-blue' } })
+    assert.equal(album?.notes, 'First writer wins.')
+  })
+
+  it('answers the enhanced form with a 409 and the newer revision as JSON', async () => {
+    assert.equal((await editAlbum({})).status, 303)
+
+    let response = await editAlbum({}, { Accept: 'application/json' })
+    let payload = (await response.json()) as { conflict: boolean; revision: number }
+
+    assert.equal(response.status, 409)
+    assert.equal(payload.conflict, true)
+    assert.equal(payload.revision, 2)
+  })
+
+  it('stays on the edit page for the save-and-continue intent', async () => {
+    let response = await editAlbum({ intent: 'save-and-continue', notes: 'Still editing.' })
+    let html = await response.text()
+
+    assert.equal(response.status, 200)
+    assert.match(html, /Saved\. Keep editing/)
+    // The form comes back carrying the revision the next save needs.
+    assert.match(html, /<input type="hidden" name="revision" value="2"/)
+    assert.match(html, /Still editing\./)
+  })
+
+  it('gives the enhanced save-and-continue the next revision as JSON', async () => {
+    let response = await editAlbum(
+      { intent: 'save-and-continue' },
+      { Accept: 'application/json' },
+    )
+    let payload = (await response.json()) as { saved: boolean; revision: number }
+
+    assert.equal(response.status, 200)
+    assert.equal(payload.saved, true)
+    assert.equal(payload.revision, 2)
+  })
+
+  it('treats an unrecognized intent as a plain save instead of an error', async () => {
+    let response = await editAlbum({ intent: 'drop-the-table' })
+
+    assert.equal(response.status, 303)
+    assert.equal(response.headers.get('location'), routes.albums.show.href({ slug: 'kind-of-blue' }))
+  })
+
+  it('reports validation failures before touching the revision', async () => {
+    // A stale revision and an empty title at once: the user sees the fixable
+    // problem, and nothing is written.
+    let response = await editAlbum({ title: '', revision: '99' })
+
+    assert.equal(response.status, 400)
+    assert.match(await response.text(), /Title is required/)
+
+    let album = await db.findOne(albums, { where: { slug: 'kind-of-blue' } })
+    assert.equal(album?.revision, 1)
   })
 })
 
