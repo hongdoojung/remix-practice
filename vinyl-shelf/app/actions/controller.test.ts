@@ -457,4 +457,27 @@ describe('streaming ui with frames', () => {
     assert.equal(refresher.props.frameName, 'album-recommendations')
     assert.match(refresher.moduleUrl, /recommendations-refresher/)
   })
+
+  it('renders the shelf stats region without the document shell', async () => {
+    let response = await router.fetch(request(routes.stats.href()))
+    let html = await response.text()
+
+    assert.equal(response.status, 200)
+    assert.match(html, /<dt>Albums<\/dt><dd>3<\/dd>/)
+    assert.match(html, /<dt>Genres<\/dt><dd>3<\/dd>/)
+    assert.match(html, /<dt>Latest year<\/dt><dd>1998<\/dd>/)
+    assert.equal(html.includes('<html'), false)
+    assert.equal(html.includes('aria-label="Primary"'), false)
+  })
+
+  it('registers a named, pending stats frame on the home page', async () => {
+    let response = await router.fetch(request(routes.home.href()))
+    let html = await response.text()
+    let stats = Object.values(rmxData(html).f ?? {}).find((frame) => frame.name === 'shelf-stats')
+
+    assert.ok(stats, 'expected a frame named shelf-stats')
+    assert.equal(stats.src, routes.stats.href())
+    assert.equal(stats.status, 'pending')
+    assert.ok(html.indexOf('Loading shelf stats…') < html.indexOf('<dt>Albums</dt>'))
+  })
 })

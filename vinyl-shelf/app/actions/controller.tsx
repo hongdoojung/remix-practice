@@ -5,6 +5,7 @@ import { listAlbums } from '../data/albums.ts'
 import { routes } from '../routes.ts'
 import { HomePage } from '../ui/vinyl-shelf.tsx'
 import { renderAlbumFeed } from './feed.ts'
+import { ShelfStats } from './stats.tsx'
 
 export default createController(routes, {
   actions: {
@@ -15,6 +16,17 @@ export default createController(routes, {
     },
     home(context) {
       return context.render(<HomePage albums={listAlbums()} />)
+    },
+    stats(context) {
+      let albums = listAlbums()
+
+      return context.render(
+        <ShelfStats
+          albumCount={albums.length}
+          genreCount={new Set(albums.map((album) => album.genre)).size}
+          latestYear={albums.length ? Math.max(...albums.map((album) => album.year)) : null}
+        />,
+      )
     },
     feed() {
       return renderAlbumFeed(listAlbums())
