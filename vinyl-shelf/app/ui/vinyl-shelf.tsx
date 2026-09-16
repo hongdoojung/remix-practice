@@ -75,6 +75,20 @@ export function HomePage(handle: Handle<{ albums: Album[] }>) {
         <section mix={sectionStyle}>
           <div mix={sectionHeaderStyle}>
             <div>
+              <p mix={eyebrowStyle}>Route-owned region</p>
+              <h2 mix={headingStyle}>Shelf stats</h2>
+            </div>
+          </div>
+          <Frame
+            name="shelf-stats"
+            src={routes.stats.href()}
+            fallback={<p mix={leadStyle}>Loading shelf stats…</p>}
+          />
+        </section>
+
+        <section mix={sectionStyle}>
+          <div mix={sectionHeaderStyle}>
+            <div>
               <p mix={eyebrowStyle}>Seed data</p>
               <h2 mix={headingStyle}>Recent shelf entries</h2>
             </div>

@@ -3,6 +3,7 @@ import { del, form, get, post, route } from 'remix/routes'
 export const routes = route({
   assets: get('/assets/*path'),
   home: '/',
+  stats: get('/stats'),
   albums: {
     index: get('/albums'),
     create: post('/albums'),
