@@ -1,5 +1,8 @@
 import { clientEntry, css, link, on, type Handle, type SerializableProps } from 'remix/ui'
+import { animateEntrance, animateExit, animateLayout, spring } from 'remix/ui/animation'
 import input from 'remix/ui/input'
+
+import { prefersReducedMotion } from './motion.ts'
 
 interface AlbumSearchProps extends SerializableProps {
   /** The route URL comes from the server so the browser never hardcodes it. */
@@ -21,6 +24,9 @@ export const AlbumSearch = clientEntry(
     let loading = false
     let query = ''
     let results: SearchResult[] = []
+    // The animation mixins run as JavaScript, so the CSS media query cannot
+    // stop them. Read the preference in the browser-only input handler.
+    let motion = false
 
     return () => (
       <div mix={searchStyle}>
@@ -36,6 +42,7 @@ export const AlbumSearch = clientEntry(
             // replace newer results.
             on('input', async (event, signal) => {
               query = event.currentTarget.value
+              motion = !prefersReducedMotion()
               error = undefined
               loading = query !== ''
               handle.update()
@@ -88,7 +95,15 @@ export const AlbumSearch = clientEntry(
           {results.map((album) => (
             // `link(...)` makes the whole row behave like a link, including
             // role, keyboard activation, and client navigation.
-            <li key={album.slug} mix={link(album.href)}>
+            <li
+              key={album.slug}
+              mix={[
+                link(album.href),
+                animateEntrance(motion && { opacity: 0, transform: 'translateY(6px)', ...spring('snappy') }),
+                animateExit(motion && { opacity: 0, transform: 'translateY(-6px)', ...spring('snappy') }),
+                animateLayout(motion && { ...spring('bouncy') }),
+              ]}
+            >
               <strong>{album.title}</strong>
               <span>
                 {album.artist}, {album.year}
