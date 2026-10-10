@@ -6,6 +6,7 @@ import type { Album } from '../../../data/albums.ts'
 import type { AlbumFieldErrors, AlbumFormValues } from '../../../data/validation.ts'
 import { routes } from '../../../routes.ts'
 import { Document } from '../../../ui/document.tsx'
+import { RequestScope } from '../../../ui/request-scope.tsx'
 
 export function AlbumEditPage(
   handle: Handle<{
@@ -15,6 +16,8 @@ export function AlbumEditPage(
     notice?: 'saved' | 'conflict'
   }>,
 ) {
+  let scope = handle.context.get(RequestScope)
+
   return () => {
     let { album, errors = {}, values, notice } = handle.props
     let formValues: AlbumFormValues = values ?? {
@@ -50,6 +53,7 @@ export function AlbumEditPage(
               values={formValues}
               errors={errors}
               revision={album.revision}
+              csrfToken={scope.csrfToken}
               notice={notice}
             />
           </section>

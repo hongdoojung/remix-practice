@@ -19,6 +19,9 @@ export const albums = table({
     // built from. Two people editing the same album no longer overwrite each
     // other silently.
     revision: c.integer().notNull().default(1),
+    // Who may edit or delete this album. Signing in proves who a request comes
+    // from; this column decides what that person may change.
+    owner_id: c.integer(),
   },
   // Persistence invariants run for every caller, not just the album form.
   // Request validation may be skipped by a future code path; this cannot.
@@ -45,3 +48,20 @@ export const albums = table({
 })
 
 export type AlbumRow = TableRow<typeof albums>
+
+export const users = table({
+  name: 'users',
+  columns: {
+    id: c.integer().primaryKey().autoIncrement(),
+    email: c.text().notNull().unique(),
+    name: c.text().notNull(),
+    password_hash: c.text().notNull(),
+  },
+  beforeWrite({ value }) {
+    // Login compares emails exactly, so they are stored in one canonical form.
+    if (typeof value.email !== 'string') return { value }
+    return { value: { ...value, email: value.email.trim().toLowerCase() } }
+  },
+})
+
+export type UserRow = TableRow<typeof users>

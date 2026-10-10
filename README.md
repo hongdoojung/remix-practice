@@ -83,6 +83,7 @@ curriculum 06: Streaming UI with Frames
 curriculum 07: Animation
 curriculum 08: Data and Validation
 curriculum 09: Forms and Mutations
+curriculum 10: Auth, Sessions, and Security
 ```
 
 특정 챕터 상태로 이동해서 보고 싶다면 해당 커밋을 checkout하면 된다.

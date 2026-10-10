@@ -1,29 +1,52 @@
 import { createController } from 'remix/router'
 import { redirect } from 'remix/response/redirect'
 
-import { createAlbum, deleteAlbum, getAlbum, getRecommendations, listAlbums } from '../../data/albums.ts'
+import {
+  canManageAlbum,
+  createAlbum,
+  deleteAlbum,
+  getAlbum,
+  getRecommendations,
+  listAlbums,
+} from '../../data/albums.ts'
 import { validateCreateAlbum } from '../../data/validation.ts'
+import { requireUser } from '../../middleware/auth.ts'
+import { flashNotice, takeNotice } from '../../middleware/session.ts'
 import { routes } from '../../routes.ts'
-import { AlbumDetailPage, AlbumsPage, NotFoundPage } from '../../ui/vinyl-shelf.tsx'
+import { AlbumDetailPage, AlbumsPage, ForbiddenPage, NotFoundPage } from '../../ui/vinyl-shelf.tsx'
 import { AlbumRecommendations } from './recommendations.tsx'
 
 export default createController(routes.albums, {
   actions: {
     async index(context) {
-      return context.render(<AlbumsPage albums={await listAlbums(context.db)} />)
+      return context.render(
+        <AlbumsPage albums={await listAlbums(context.db)} notice={takeNotice(context.session)} />,
+      )
     },
-    async create(context) {
-      let result = validateCreateAlbum(context.formData)
+    create: {
+      middleware: [requireUser()],
+      async handler(context) {
+        // requireUser() already answered anonymous requests; this narrows the type,
+        // which beta.5 does not carry through action middleware inside a controller.
+        if (!context.auth.ok) return new Response('Unauthorized', { status: 401 })
+        let user = context.auth.identity
+        let result = validateCreateAlbum(context.formData)
 
-      if (!result.ok) {
-        return context.render(
-          <AlbumsPage albums={await listAlbums(context.db)} errors={result.errors} values={result.values} />,
-          { status: 400 },
-        )
-      }
+        if (!result.ok) {
+          return context.render(
+            <AlbumsPage
+              albums={await listAlbums(context.db)}
+              errors={result.errors}
+              values={result.values}
+            />,
+            { status: 400 },
+          )
+        }
 
-      let album = await createAlbum(context.db, result.value)
-      return redirect(routes.albums.show.href({ slug: album.slug }), 303)
+        let album = await createAlbum(context.db, user.id, result.value)
+        flashNotice(context.session, `Added ${album.title}.`)
+        return redirect(routes.albums.show.href({ slug: album.slug }), 303)
+      },
     },
     async show(context) {
       let album = await getAlbum(context.db, context.params.slug)
@@ -31,7 +54,14 @@ export default createController(routes.albums, {
         return context.render(<NotFoundPage slug={context.params.slug} />, { status: 404 })
       }
 
-      return context.render(<AlbumDetailPage album={album} />)
+      let user = context.auth.ok ? context.auth.identity : null
+      return context.render(
+        <AlbumDetailPage
+          album={album}
+          canManage={user ? canManageAlbum(album, user.id) : false}
+          notice={takeNotice(context.session)}
+        />,
+      )
     },
     async recommendations(context) {
       let album = await getAlbum(context.db, context.params.slug)
@@ -48,13 +78,22 @@ export default createController(routes.albums, {
         />,
       )
     },
-    async destroy(context) {
-      let deleted = await deleteAlbum(context.db, context.params.slug)
-      if (!deleted) {
-        return context.render(<NotFoundPage slug={context.params.slug} />, { status: 404 })
-      }
+    destroy: {
+      middleware: [requireUser()],
+      async handler(context) {
+        if (!context.auth.ok) return new Response('Unauthorized', { status: 401 })
+        let outcome = await deleteAlbum(context.db, context.auth.identity.id, context.params.slug)
 
-      return redirect(routes.albums.index.href(), 303)
+        if (!outcome.ok && outcome.reason === 'not-found') {
+          return context.render(<NotFoundPage slug={context.params.slug} />, { status: 404 })
+        }
+        if (!outcome.ok) {
+          return context.render(<ForbiddenPage slug={context.params.slug} />, { status: 403 })
+        }
+
+        flashNotice(context.session, 'Album deleted.')
+        return redirect(routes.albums.index.href(), 303)
+      },
     },
   },
 })

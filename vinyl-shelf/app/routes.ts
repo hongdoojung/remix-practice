@@ -11,6 +11,8 @@ export const routes = route({
     destroy: del('/albums/:slug'),
     edit: form('/albums/:slug/edit'),
   },
+  login: form('/login'),
+  logout: post('/logout'),
   feed: get('/feed'),
   apiAlbums: get('/api/albums'),
 })

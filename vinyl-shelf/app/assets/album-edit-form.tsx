@@ -19,6 +19,8 @@ interface AlbumEditFormProps extends SerializableProps {
   errors: Partial<Record<FieldName, string>>
   /** The album revision this form was built from. Submitted back as a hidden field. */
   revision: number
+  /** Hydrated code cannot read server context, so the token arrives as a prop. */
+  csrfToken: string
   notice?: 'saved' | 'conflict'
 }
 
@@ -102,6 +104,10 @@ export const AlbumEditForm = clientEntry(
 
                 if (typeof payload.revision === 'number') revision = payload.revision
                 notice = 'conflict'
+              } else if (response.status === 401) {
+                formError = 'Your session ended. Sign in again to save.'
+              } else if (response.status === 403) {
+                formError = 'You can only edit albums you added.'
               } else if (response.status === 400) {
                 let payload = (await response.json()) as {
                   errors: Partial<Record<FieldName, string>>
@@ -142,6 +148,7 @@ export const AlbumEditForm = clientEntry(
           </p>
         ) : null}
 
+        <input type="hidden" name="_csrf" value={handle.props.csrfToken} />
         <input type="hidden" name="revision" value={String(revision)} />
 
         {fields.map((field) => (

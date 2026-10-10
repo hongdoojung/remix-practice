@@ -11,6 +11,7 @@ import type { Album } from '../data/albums.ts'
 import type { AlbumFieldErrors, AlbumFormValues } from '../data/validation.ts'
 import { routes } from '../routes.ts'
 import { Document } from './document.tsx'
+import { CsrfField, RequestScope } from './request-scope.tsx'
 
 const emptyValues: AlbumFormValues = {
   title: '',
@@ -20,9 +21,9 @@ const emptyValues: AlbumFormValues = {
   notes: '',
 }
 
-export function HomePage(handle: Handle<{ albums: Album[] }>) {
+export function HomePage(handle: Handle<{ albums: Album[]; notice?: string }>) {
   return () => {
-    let { albums } = handle.props
+    let { albums, notice } = handle.props
     let featured = albums[0]
 
     return (
@@ -31,6 +32,7 @@ export function HomePage(handle: Handle<{ albums: Album[] }>) {
         description="A Remix 3 practice app for routing, request handling, and server-rendered UI."
         activePath="/"
         albumCount={albums.length}
+        notice={notice}
       >
         <section mix={heroStyle}>
           <div>
@@ -94,10 +96,13 @@ export function AlbumsPage(
     albums: Album[]
     errors?: AlbumFieldErrors
     values?: AlbumFormValues
+    notice?: string
   }>,
 ) {
+  let scope = handle.context.get(RequestScope)
+
   return () => {
-    let { albums, errors = {}, values = emptyValues } = handle.props
+    let { albums, errors = {}, values = emptyValues, notice } = handle.props
 
     return (
       <AppShell
@@ -105,6 +110,7 @@ export function AlbumsPage(
         description="Every album on the shelf, with a native form action for adding one more."
         activePath="/albums"
         albumCount={albums.length}
+        notice={notice}
       >
         <section mix={sectionStyle}>
           <div mix={sectionHeaderStyle}>
@@ -127,17 +133,31 @@ export function AlbumsPage(
         </section>
 
         <section mix={splitStyle}>
-          <form method="post" action={routes.albums.create.href()} mix={panelStyle}>
-            <h2 mix={headingStyle}>Add album</h2>
-            <TextField name="title" label="Title" value={values.title} error={errors.title} />
-            <TextField name="artist" label="Artist" value={values.artist} error={errors.artist} />
-            <TextField name="year" label="Year" value={values.year} error={errors.year} />
-            <TextField name="genre" label="Genre" value={values.genre} error={errors.genre} />
-            <TextArea name="notes" label="Notes" value={values.notes} error={errors.notes} />
-            <button type="submit" class="shelf-cta" mix={button({ tone: 'primary', size: 'lg' })}>
-              Add album
-            </button>
-          </form>
+          {scope.user ? (
+            <form method="post" action={routes.albums.create.href()} mix={panelStyle}>
+              <h2 mix={headingStyle}>Add album</h2>
+              <CsrfField />
+              <TextField name="title" label="Title" value={values.title} error={errors.title} />
+              <TextField name="artist" label="Artist" value={values.artist} error={errors.artist} />
+              <TextField name="year" label="Year" value={values.year} error={errors.year} />
+              <TextField name="genre" label="Genre" value={values.genre} error={errors.genre} />
+              <TextArea name="notes" label="Notes" value={values.notes} error={errors.notes} />
+              <button type="submit" class="shelf-cta" mix={button({ tone: 'primary', size: 'lg' })}>
+                Add album
+              </button>
+            </form>
+          ) : (
+            <div mix={panelStyle}>
+              <h2 mix={headingStyle}>Add album</h2>
+              <p mix={leadStyle}>Albums belong to the person who adds them.</p>
+              <a
+                href={routes.login.index.href(undefined, { returnTo: routes.albums.index.href() })}
+                mix={primaryLinkStyle}
+              >
+                Sign in to add one
+              </a>
+            </div>
+          )}
 
           <AlbumGrid albums={albums} />
         </section>
@@ -146,15 +166,18 @@ export function AlbumsPage(
   }
 }
 
-export function AlbumDetailPage(handle: Handle<{ album: Album }>) {
+export function AlbumDetailPage(
+  handle: Handle<{ album: Album; canManage: boolean; notice?: string }>,
+) {
   return () => {
-    let { album } = handle.props
+    let { album, canManage, notice } = handle.props
 
     return (
       <AppShell
         title={`${album.title} | Vinyl Shelf`}
         description={`${album.title} by ${album.artist}, a ${album.genre} record from ${album.year}.`}
         activePath="/albums"
+        notice={notice}
       >
         <article mix={detailStyle}>
           <p mix={eyebrowStyle}>Route params</p>
@@ -178,18 +201,24 @@ export function AlbumDetailPage(handle: Handle<{ album: Album }>) {
             </div>
           </dl>
           <div mix={actionRowStyle}>
-            <a href={routes.albums.edit.index.href({ slug: album.slug })} mix={primaryLinkStyle}>
-              Edit album
-            </a>
+            {/* Hiding the buttons is only courtesy; the edit and delete actions check ownership themselves. */}
+            {canManage ? (
+              <a href={routes.albums.edit.index.href({ slug: album.slug })} mix={primaryLinkStyle}>
+                Edit album
+              </a>
+            ) : null}
             <a href={routes.albums.index.href()} mix={plainLinkStyle}>
               Back to albums
             </a>
-            <form method="post" action={routes.albums.destroy.href({ slug: album.slug })}>
-              <input type="hidden" name="_method" value="DELETE" />
-              <button type="submit" mix={dangerButtonStyle}>
-                Delete album
-              </button>
-            </form>
+            {canManage ? (
+              <form method="post" action={routes.albums.destroy.href({ slug: album.slug })}>
+                <input type="hidden" name="_method" value="DELETE" />
+                <CsrfField />
+                <button type="submit" mix={dangerButtonStyle}>
+                  Delete album
+                </button>
+              </form>
+            ) : null}
           </div>
         </article>
 
@@ -232,6 +261,21 @@ export function NotFoundPage(handle: Handle<{ slug: string }>) {
   )
 }
 
+export function ForbiddenPage(handle: Handle<{ slug: string }>) {
+  return () => (
+    <AppShell title="Not your album | Vinyl Shelf" activePath="/albums">
+      <section mix={panelStyle}>
+        <p mix={eyebrowStyle}>403 response</p>
+        <h1 mix={titleStyle}>Not your album</h1>
+        <p mix={leadStyle}>You are signed in, but only the person who added this album can change it.</p>
+        <a href={routes.albums.show.href({ slug: handle.props.slug })} mix={primaryLinkStyle}>
+          Back to the album
+        </a>
+      </section>
+    </AppShell>
+  )
+}
+
 /**
  * The value descendants need without threading it through every intermediate
  * component. The provider component is the context key, so
@@ -250,6 +294,7 @@ export function AppShell(
       description?: string
       activePath: string
       albumCount?: number
+      notice?: string
     },
     ShellContext
   >,
@@ -260,13 +305,20 @@ export function AppShell(
   })
 
   return () => {
-    let { children, title, description } = handle.props
+    let { children, title, description, notice } = handle.props
 
     return (
       <Document title={title} description={description}>
         <div mix={shellStyle}>
           <PrimaryNav />
-          <main mix={mainStyle}>{children}</main>
+          <main mix={mainStyle}>
+            {notice ? (
+              <p role="status" mix={noticeStyle}>
+                {notice}
+              </p>
+            ) : null}
+            {children}
+          </main>
         </div>
       </Document>
     )
@@ -275,6 +327,7 @@ export function AppShell(
 
 function PrimaryNav(handle: Handle) {
   let shell = handle.context.get(AppShell)
+  let scope = handle.context.get(RequestScope)
 
   return () => (
     <nav aria-label="Primary" mix={navStyle}>
@@ -289,9 +342,27 @@ function PrimaryNav(handle: Handle) {
         Albums
       </a>
       <a href={routes.apiAlbums.href()}>API</a>
-      {shell.albumCount === undefined ? null : (
-        <span mix={navCountStyle}>{shell.albumCount} albums</span>
-      )}
+      <div mix={navAccountStyle}>
+        {shell.albumCount === undefined ? null : (
+          <span mix={navCountStyle}>{shell.albumCount} albums</span>
+        )}
+        {scope.user ? (
+          // Sign-out changes state, so it is a POST form rather than a link a
+          // prefetch or an <img src> could trigger.
+          <form method="post" action={routes.logout.href()} mix={navFormStyle}>
+            <CsrfField />
+            <span>{scope.user.name}</span>
+            <button type="submit">Sign out</button>
+          </form>
+        ) : (
+          <a
+            href={routes.login.index.href()}
+            aria-current={shell.activePath === '/login' ? 'page' : undefined}
+          >
+            Sign in
+          </a>
+        )}
+      </div>
     </nav>
   )
 }
@@ -424,10 +495,40 @@ const navStyle = css({
   },
 })
 
-const navCountStyle = css({
+const navCountStyle = css({ opacity: 0.6 })
+
+const navAccountStyle = css({
+  alignItems: 'center',
+  display: 'flex',
+  gap: '20px',
   marginLeft: 'auto',
-  opacity: 0.6,
   '@media (max-width: 640px)': { marginLeft: 0 },
+})
+
+const navFormStyle = css({
+  alignItems: 'center',
+  display: 'flex',
+  gap: '10px',
+  margin: 0,
+  '& button': {
+    background: 'transparent',
+    border: '1px solid currentColor',
+    borderRadius: 'var(--shelf-radius-sm)',
+    color: 'var(--shelf-ink-inverse)',
+    cursor: 'pointer',
+    font: 'inherit',
+    padding: '4px 10px',
+  },
+})
+
+const noticeStyle = css({
+  background: '#eef7ee',
+  border: '1px solid #3f8f4f',
+  borderRadius: 'var(--shelf-radius-sm)',
+  color: '#2c6b39',
+  fontWeight: 700,
+  margin: 0,
+  padding: '10px 12px',
 })
 
 const mainStyle = css({

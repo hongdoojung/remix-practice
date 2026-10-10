@@ -3,8 +3,9 @@ import { DataTableValidationError } from 'remix/data-table'
 // `remix/test` registers suites for the `remix test` runner, which needs
 // playwright. This app runs `node --test`, so the suite uses the node test
 // runner directly and keeps `remix/assert` for assertions.
-import { beforeEach, describe, it } from 'node:test'
+import { before, beforeEach, describe, it } from 'node:test'
 
+import { Browser } from '../../test/browser.ts'
 import { resetAlbumsForTest } from '../data/albums.ts'
 import { db } from '../data/database.ts'
 import { albums } from '../data/schema.ts'
@@ -14,6 +15,14 @@ import { routes } from '../routes.ts'
 function request(path: string, init?: RequestInit) {
   return new Request(`http://local.test${path}`, init)
 }
+
+// Signed in as the account that owns the seeded albums. Mutations need a
+// session and a CSRF token since chapter 10; the auth suites cover the rest.
+let owner: Browser
+
+before(async () => {
+  owner = await Browser.signedIn()
+})
 
 beforeEach(async () => {
   await resetAlbumsForTest(db)
@@ -32,7 +41,7 @@ describe('start here practice routes', () => {
   })
 
   it('renders albums with the seeded collection and native form', async () => {
-    let response = await router.fetch(request(routes.albums.index.href()))
+    let response = await owner.fetch(routes.albums.index.href())
     let html = await response.text()
 
     assert.equal(response.status, 200)
@@ -42,19 +51,13 @@ describe('start here practice routes', () => {
   })
 
   it('creates an album from form data and redirects to the album detail route', async () => {
-    let response = await router.fetch(
-      request(routes.albums.create.href(), {
-        method: 'POST',
-        body: new URLSearchParams({
-          title: 'Discovery',
-          artist: 'Daft Punk',
-          year: '2001',
-          genre: 'French house',
-          notes: 'Practice a native form action and redirect.',
-        }),
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      }),
-    )
+    let response = await owner.submit(routes.albums.create.href(), {
+      title: 'Discovery',
+      artist: 'Daft Punk',
+      year: '2001',
+      genre: 'French house',
+      notes: 'Practice a native form action and redirect.',
+    })
 
     assert.equal(response.status, 303)
     assert.equal(response.headers.get('location'), routes.albums.show.href({ slug: 'discovery' }))
@@ -82,7 +85,7 @@ describe('start here practice routes', () => {
   })
 
   it('renders a route-owned edit form from a nested route map', async () => {
-    let response = await router.fetch(request(routes.albums.edit.index.href({ slug: 'kind-of-blue' })))
+    let response = await owner.fetch(routes.albums.edit.index.href({ slug: 'kind-of-blue' }))
     let html = await response.text()
 
     assert.equal(response.status, 200)
@@ -93,20 +96,14 @@ describe('start here practice routes', () => {
   })
 
   it('updates an album through the nested edit action and redirects to show', async () => {
-    let response = await router.fetch(
-      request(routes.albums.edit.action.href({ slug: 'kind-of-blue' }), {
-        method: 'POST',
-        body: new URLSearchParams({
-          title: 'Kind of Blue',
-          artist: 'Miles Davis',
-          year: '1959',
-          genre: 'Modal jazz',
-          notes: 'Updated through a nested controller action.',
-          revision: '1',
-        }),
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      }),
-    )
+    let response = await owner.submit(routes.albums.edit.action.href({ slug: 'kind-of-blue' }), {
+      title: 'Kind of Blue',
+      artist: 'Miles Davis',
+      year: '1959',
+      genre: 'Modal jazz',
+      notes: 'Updated through a nested controller action.',
+      revision: '1',
+    })
 
     assert.equal(response.status, 303)
     assert.equal(response.headers.get('location'), routes.albums.show.href({ slug: 'kind-of-blue' }))
@@ -116,13 +113,9 @@ describe('start here practice routes', () => {
   })
 
   it('deletes an album through method override middleware', async () => {
-    let response = await router.fetch(
-      request(routes.albums.destroy.href({ slug: 'kind-of-blue' }), {
-        method: 'POST',
-        body: new URLSearchParams({ _method: 'DELETE' }),
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      }),
-    )
+    let response = await owner.submit(routes.albums.destroy.href({ slug: 'kind-of-blue' }), {
+      _method: 'DELETE',
+    })
 
     assert.equal(response.status, 303)
     assert.equal(response.headers.get('location'), routes.albums.index.href())
@@ -187,7 +180,7 @@ describe('rendering ui', () => {
   })
 
   it('connects each field label to its input through handle.id', async () => {
-    let response = await router.fetch(request(routes.albums.index.href()))
+    let response = await owner.fetch(routes.albums.index.href())
     let html = await response.text()
     let labelIds = [...html.matchAll(/<label for="([^"]+)"/g)].map((match) => match[1])
 
@@ -217,19 +210,13 @@ describe('rendering ui', () => {
   })
 
   it('escapes interpolated values in the html template feed', async () => {
-    let response = await router.fetch(
-      request(routes.albums.create.href(), {
-        method: 'POST',
-        body: new URLSearchParams({
-          title: '<script>alert(1)</script>',
-          artist: 'Test',
-          year: '2020',
-          genre: 'Test',
-          notes: 'Escaping check.',
-        }),
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      }),
-    )
+    let response = await owner.submit(routes.albums.create.href(), {
+      title: '<script>alert(1)</script>',
+      artist: 'Test',
+      year: '2020',
+      genre: 'Test',
+      notes: 'Escaping check.',
+    })
     assert.equal(response.status, 303)
 
     let feed = await router.fetch(request(routes.feed.href()))
@@ -283,9 +270,7 @@ describe('interactivity', () => {
   })
 
   it('renders the hydrated edit form as a working form without JavaScript', async () => {
-    let response = await router.fetch(
-      request(routes.albums.edit.index.href({ slug: 'kind-of-blue' })),
-    )
+    let response = await owner.fetch(routes.albums.edit.index.href({ slug: 'kind-of-blue' }))
     let html = await response.text()
     let entries = clientEntries(html)
 
@@ -313,21 +298,16 @@ describe('interactivity', () => {
   })
 
   it('answers the enhanced form with JSON errors instead of an HTML page', async () => {
-    let response = await router.fetch(
-      request(routes.albums.edit.action.href({ slug: 'kind-of-blue' }), {
-        method: 'POST',
-        body: new URLSearchParams({
-          title: '',
-          artist: 'Miles Davis',
-          year: 'not-a-year',
-          genre: 'Modal jazz',
-          notes: 'Validation check.',
-        }),
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          Accept: 'application/json',
-        },
-      }),
+    let response = await owner.submit(
+      routes.albums.edit.action.href({ slug: 'kind-of-blue' }),
+      {
+        title: '',
+        artist: 'Miles Davis',
+        year: 'not-a-year',
+        genre: 'Modal jazz',
+        notes: 'Validation check.',
+      },
+      { Accept: 'application/json' },
     )
     let payload = (await response.json()) as { errors: Record<string, string> }
 
@@ -338,19 +318,13 @@ describe('interactivity', () => {
   })
 
   it('still answers a plain browser submission with a re-rendered HTML page', async () => {
-    let response = await router.fetch(
-      request(routes.albums.edit.action.href({ slug: 'kind-of-blue' }), {
-        method: 'POST',
-        body: new URLSearchParams({
-          title: '',
-          artist: 'Miles Davis',
-          year: '1959',
-          genre: 'Modal jazz',
-          notes: 'Validation check.',
-        }),
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      }),
-    )
+    let response = await owner.submit(routes.albums.edit.action.href({ slug: 'kind-of-blue' }), {
+      title: '',
+      artist: 'Miles Davis',
+      year: '1959',
+      genre: 'Modal jazz',
+      notes: 'Validation check.',
+    })
     let html = await response.text()
 
     assert.equal(response.status, 400)
@@ -465,19 +439,13 @@ describe('streaming ui with frames', () => {
 
 describe('data and validation', () => {
   it('persists a form submission as a database row', async () => {
-    let response = await router.fetch(
-      request(routes.albums.create.href(), {
-        method: 'POST',
-        body: new URLSearchParams({
-          title: '  In Rainbows  ',
-          artist: 'Radiohead',
-          year: '2007',
-          genre: 'Art rock',
-          notes: 'Written through the request schema, stored through the table.',
-        }),
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      }),
-    )
+    let response = await owner.submit(routes.albums.create.href(), {
+      title: '  In Rainbows  ',
+      artist: 'Radiohead',
+      year: '2007',
+      genre: 'Art rock',
+      notes: 'Written through the request schema, stored through the table.',
+    })
     assert.equal(response.status, 303)
 
     // beforeWrite trimmed the padded title before the row was stored.
@@ -488,21 +456,16 @@ describe('data and validation', () => {
   })
 
   it('reports schema issues per field with the form untouched', async () => {
-    let response = await router.fetch(
-      request(routes.albums.edit.action.href({ slug: 'kind-of-blue' }), {
-        method: 'POST',
-        body: new URLSearchParams({
-          title: '',
-          artist: '',
-          year: '1959',
-          genre: 'Modal jazz',
-          notes: 'Validation check.',
-        }),
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          Accept: 'application/json',
-        },
-      }),
+    let response = await owner.submit(
+      routes.albums.edit.action.href({ slug: 'kind-of-blue' }),
+      {
+        title: '',
+        artist: '',
+        year: '1959',
+        genre: 'Modal jazz',
+        notes: 'Validation check.',
+      },
+      { Accept: 'application/json' },
     )
     let payload = (await response.json()) as { errors: Record<string, string> }
 
@@ -548,19 +511,13 @@ describe('data and validation', () => {
 
   it('generates unique slugs at the data layer', async () => {
     for (let attempt = 0; attempt < 2; attempt++) {
-      let response = await router.fetch(
-        request(routes.albums.create.href(), {
-          method: 'POST',
-          body: new URLSearchParams({
-            title: 'Kind of Blue',
-            artist: 'Cover Band',
-            year: '2020',
-            genre: 'Jazz',
-            notes: 'Same title as a seed album.',
-          }),
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        }),
-      )
+      let response = await owner.submit(routes.albums.create.href(), {
+        title: 'Kind of Blue',
+        artist: 'Cover Band',
+        year: '2020',
+        genre: 'Jazz',
+        notes: 'Same title as a seed album.',
+      })
       assert.equal(response.status, 303)
     }
 
@@ -597,19 +554,13 @@ describe('data and validation', () => {
   })
 
   it('lists newest albums first from the database ordering', async () => {
-    await router.fetch(
-      request(routes.albums.create.href(), {
-        method: 'POST',
-        body: new URLSearchParams({
-          title: 'Newest',
-          artist: 'Test',
-          year: '2024',
-          genre: 'Test',
-          notes: 'Ordering check.',
-        }),
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      }),
-    )
+    await owner.submit(routes.albums.create.href(), {
+      title: 'Newest',
+      artist: 'Test',
+      year: '2024',
+      genre: 'Test',
+      notes: 'Ordering check.',
+    })
 
     let response = await router.fetch(request(routes.apiAlbums.href()))
     let payload = (await response.json()) as { albums: Array<{ title: string }> }
@@ -621,27 +572,23 @@ describe('data and validation', () => {
 
 describe('forms and mutations', () => {
   function editAlbum(fields: Record<string, string>, headers: Record<string, string> = {}) {
-    return router.fetch(
-      request(routes.albums.edit.action.href({ slug: 'kind-of-blue' }), {
-        method: 'POST',
-        body: new URLSearchParams({
-          title: 'Kind of Blue',
-          artist: 'Miles Davis',
-          year: '1959',
-          genre: 'Modal jazz',
-          notes: 'Edited.',
-          revision: '1',
-          ...fields,
-        }),
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded', ...headers },
-      }),
+    return owner.submit(
+      routes.albums.edit.action.href({ slug: 'kind-of-blue' }),
+      {
+        title: 'Kind of Blue',
+        artist: 'Miles Davis',
+        year: '1959',
+        genre: 'Modal jazz',
+        notes: 'Edited.',
+        revision: '1',
+        ...fields,
+      },
+      headers,
     )
   }
 
   it('renders the revision the form was built from as a hidden field', async () => {
-    let response = await router.fetch(
-      request(routes.albums.edit.index.href({ slug: 'kind-of-blue' })),
-    )
+    let response = await owner.fetch(routes.albums.edit.index.href({ slug: 'kind-of-blue' }))
     let html = await response.text()
 
     assert.match(html, /<input type="hidden" name="revision" value="1"/)

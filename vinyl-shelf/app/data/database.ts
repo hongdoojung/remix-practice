@@ -7,7 +7,7 @@ import { createMigrationRunner } from 'remix/data-table/migrations'
 import { loadMigrations } from 'remix/data-table/migrations/node'
 import { createSqliteDatabaseAdapter } from 'remix/data-table/sqlite'
 
-import { seedAlbumsIfEmpty } from './albums.ts'
+import { seedShelf } from './albums.ts'
 
 const migrationsDir = fileURLToPath(new URL('../../db/migrations', import.meta.url))
 const databaseFile = fileURLToPath(new URL('../../db/vinyl-shelf.db', import.meta.url))
@@ -28,4 +28,4 @@ export const db = createDatabase(adapter)
 const migrations = await loadMigrations(migrationsDir)
 const runner = createMigrationRunner(adapter, migrations)
 await runner.up()
-await seedAlbumsIfEmpty(db)
+await seedShelf(db)

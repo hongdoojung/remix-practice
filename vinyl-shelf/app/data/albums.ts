@@ -1,6 +1,7 @@
 import type { Database } from 'remix/data-table'
 
 import { albums, type AlbumRow } from './schema.ts'
+import { findUserByEmail, seedUsersIfEmpty, shelfOwnerEmail } from './users.ts'
 
 export type Album = AlbumRow
 
@@ -13,7 +14,7 @@ export interface CreateAlbumInput {
 }
 
 // `revision` is omitted so the column default starts every seed at 1.
-const seedAlbums: Omit<Album, 'id' | 'revision'>[] = [
+const seedAlbums: Omit<Album, 'id' | 'revision' | 'owner_id'>[] = [
   {
     slug: 'kind-of-blue',
     title: 'Kind of Blue',
@@ -49,29 +50,35 @@ export function getAlbum(db: Database, slug: string) {
   return db.findOne(albums, { where: { slug } })
 }
 
-export async function createAlbum(db: Database, input: CreateAlbumInput) {
+export async function createAlbum(db: Database, ownerId: number, input: CreateAlbumInput) {
   // The slug is chosen by reading the rows that already exist, so the read and
   // the insert have to commit together. Two creates with the same title would
   // otherwise both pick the same suffix and one would hit the unique index.
   return db.transaction(async (tx) => {
     let slug = await uniqueSlug(tx, input.title)
-    return tx.create(albums, { slug, ...input }, { returnRow: true })
+    return tx.create(albums, { slug, ...input, owner_id: ownerId }, { returnRow: true })
   })
+}
+
+export function canManageAlbum(album: Album, userId: number) {
+  return album.owner_id === userId
 }
 
 export type UpdateAlbumResult =
   | { ok: true; album: Album }
   | { ok: false; reason: 'not-found' }
+  | { ok: false; reason: 'forbidden' }
   /** `album` is the row as it stands now, so the form can show what it lost. */
   | { ok: false; reason: 'conflict'; album: Album }
 
 /**
- * Applies an edit only when the form was built from the album's current
- * revision. Reading the revision and writing the new one must commit together,
- * or two submissions could both pass the check.
+ * Applies an edit only when the actor owns the album and the form was built
+ * from its current revision. Reading the row and writing the new one must
+ * commit together, or two submissions could both pass the checks.
  */
 export async function updateAlbum(
   db: Database,
+  actorId: number,
   slug: string,
   expectedRevision: number,
   input: CreateAlbumInput,
@@ -79,6 +86,9 @@ export async function updateAlbum(
   return db.transaction(async (tx) => {
     let album = await getAlbum(tx, slug)
     if (!album) return { ok: false, reason: 'not-found' }
+    // Checked here as well as in the controller: the write is the last place
+    // every caller passes through.
+    if (!canManageAlbum(album, actorId)) return { ok: false, reason: 'forbidden' }
     if (album.revision !== expectedRevision) return { ok: false, reason: 'conflict', album }
 
     let updated = await tx.update(albums, album.id, {
@@ -89,11 +99,21 @@ export async function updateAlbum(
   })
 }
 
-export async function deleteAlbum(db: Database, slug: string) {
-  let album = await getAlbum(db, slug)
-  if (!album) return false
+export type DeleteAlbumResult = { ok: true } | { ok: false; reason: 'not-found' | 'forbidden' }
 
-  return db.delete(albums, album.id)
+export async function deleteAlbum(
+  db: Database,
+  actorId: number,
+  slug: string,
+): Promise<DeleteAlbumResult> {
+  return db.transaction(async (tx) => {
+    let album = await getAlbum(tx, slug)
+    if (!album) return { ok: false, reason: 'not-found' }
+    if (!canManageAlbum(album, actorId)) return { ok: false, reason: 'forbidden' }
+
+    await tx.delete(albums, album.id)
+    return { ok: true }
+  })
 }
 
 /**
@@ -120,19 +140,29 @@ export async function getRecommendations(db: Database, album: Album) {
   return picks.slice(0, 3)
 }
 
-export async function seedAlbumsIfEmpty(db: Database) {
-  let existing = await db.count(albums)
-  if (existing > 0) return
+export async function seedShelf(db: Database) {
+  await seedUsersIfEmpty(db)
+  let owner = await findUserByEmail(db, shelfOwnerEmail)
+  if (!owner) return
 
-  // Inserted in reverse so the id-descending list shows the seeds in their
-  // curated order while later form submissions still land on top.
-  await db.createMany(albums, [...seedAlbums].reverse())
+  if ((await db.count(albums)) === 0) {
+    // Inserted in reverse so the id-descending list shows the seeds in their
+    // curated order while later form submissions still land on top.
+    await db.createMany(
+      albums,
+      [...seedAlbums].reverse().map((album) => ({ ...album, owner_id: owner.id })),
+    )
+  }
+
+  // A database created before chapter 10 has albums with no owner, which no
+  // one could ever edit again.
+  await db.exec('update albums set owner_id = ? where owner_id is null', [owner.id])
 }
 
 export async function resetAlbumsForTest(db: Database) {
   await db.exec('delete from albums')
   await db.exec("delete from sqlite_sequence where name = 'albums'")
-  await seedAlbumsIfEmpty(db)
+  await seedShelf(db)
 }
 
 async function uniqueSlug(db: Database, title: string) {

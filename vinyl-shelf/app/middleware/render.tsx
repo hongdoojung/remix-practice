@@ -1,18 +1,32 @@
 import * as path from 'node:path'
 
 import type { Router } from 'remix/router'
+import { Auth, type AuthState } from 'remix/middleware/auth'
+import { getCsrfToken } from 'remix/middleware/csrf'
 import { renderWith } from 'remix/middleware/render'
 import { createHtmlResponse } from 'remix/response/html'
 import type { RemixNode } from 'remix/ui'
 import { renderToStream } from 'remix/ui/server'
 
 import { assetServer } from '../assets.ts'
+import type { User } from '../data/users.ts'
+import { RequestScope } from '../ui/request-scope.tsx'
 
 export function render() {
   return renderWith(
-    ({ request, router }) =>
+    (context) =>
       function render(node: RemixNode, init?: ResponseInit) {
-        let stream = renderToStream(node, {
+        let { request, router } = context
+        let csrfToken = getCsrfToken(context)
+        // The factory's context is untyped; loadAuth() runs before render() and stores this shape.
+        let auth = context.get(Auth) as AuthState<User> | undefined
+        let user = auth?.ok ? auth.identity : null
+
+        let stream = renderToStream(
+          <RequestScope user={user} csrfToken={csrfToken}>
+            {node}
+          </RequestScope>,
+          {
           frameSrc: request.url,
           signal: request.signal,
           resolveFrame: (src, target) => resolveFrame(router, request, src, target),
@@ -29,7 +43,8 @@ export function render() {
               exportName: entryId.split('#')[1] || component.name || titleCaseFileName(entryId),
             }
           },
-        })
+          },
+        )
 
         return createHtmlResponse(stream, init)
       },
