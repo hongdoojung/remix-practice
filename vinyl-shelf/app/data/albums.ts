@@ -10,6 +10,7 @@ export interface CreateAlbumInput {
   year: number
   genre: string
   notes: string
+  rating: number | null
 }
 
 const seedAlbums: Omit<Album, 'id'>[] = [
@@ -20,6 +21,7 @@ const seedAlbums: Omit<Album, 'id'>[] = [
     year: 1959,
     genre: 'Modal jazz',
     notes: 'Use this detail page to practice route params and explicit 404 handling.',
+    rating: null,
   },
   {
     slug: 'rumours',
@@ -28,6 +30,7 @@ const seedAlbums: Omit<Album, 'id'>[] = [
     year: 1977,
     genre: 'Rock',
     notes: 'A seeded album keeps the first server-rendered list easy to inspect.',
+    rating: null,
   },
   {
     slug: 'miseducation',
@@ -36,6 +39,7 @@ const seedAlbums: Omit<Album, 'id'>[] = [
     year: 1998,
     genre: 'Neo soul',
     notes: 'The JSON route returns this same server-owned data without page UI.',
+    rating: null,
   },
 ]
 

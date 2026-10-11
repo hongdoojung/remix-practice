@@ -616,6 +616,71 @@ describe('data and validation', () => {
     assert.equal(payload.albums[0]?.title, 'Newest')
     assert.equal(payload.albums[1]?.title, 'Kind of Blue')
   })
+
+  it('stores an album without a rating when the rating input is left empty', async () => {
+    let response = await router.fetch(
+      request(routes.albums.create.href(), {
+        method: 'POST',
+        body: new URLSearchParams({
+          title: 'Unrated',
+          artist: 'Test',
+          year: '2024',
+          genre: 'Test',
+          notes: 'Rating is optional.',
+          rating: '',
+        }),
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      }),
+    )
+    assert.equal(response.status, 303)
+
+    let row = await db.findOne(albums, { where: { slug: 'unrated' } })
+    assert.ok(row, 'expected the album row in the database')
+    assert.equal(row.rating, null)
+  })
+
+  it('rejects an out-of-range rating from the form with a 400', async () => {
+    let response = await router.fetch(
+      request(routes.albums.create.href(), {
+        method: 'POST',
+        body: new URLSearchParams({
+          title: 'Too Good',
+          artist: 'Test',
+          year: '2024',
+          genre: 'Test',
+          notes: 'Rating is out of range.',
+          rating: '7',
+        }),
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      }),
+    )
+    let html = await response.text()
+
+    assert.equal(response.status, 400)
+    assert.match(html, /Rating must be a whole number from 1 to 5/)
+    assert.equal(await db.findOne(albums, { where: { slug: 'too-good' } }), null)
+  })
+
+  it('rejects an out-of-range rating written directly to the table', async () => {
+    await assert.rejects(
+      db.create(albums, {
+        slug: 'bad-rating',
+        title: 'Bad Rating',
+        artist: 'Nobody',
+        year: 2020,
+        genre: 'None',
+        notes: 'Should never be stored.',
+        rating: 7,
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof DataTableValidationError)
+        assert.equal(error.metadata?.column, 'rating')
+        return true
+      },
+    )
+
+    assert.equal(await db.findOne(albums, { where: { slug: 'bad-rating' } }), null)
+  })
 })
 
 describe('animation', () => {
