@@ -18,6 +18,7 @@ const emptyValues: AlbumFormValues = {
   year: '',
   genre: '',
   notes: '',
+  rating: '',
 }
 
 export function HomePage(handle: Handle<{ albums: Album[] }>) {
@@ -134,6 +135,7 @@ export function AlbumsPage(
             <TextField name="year" label="Year" value={values.year} error={errors.year} />
             <TextField name="genre" label="Genre" value={values.genre} error={errors.genre} />
             <TextArea name="notes" label="Notes" value={values.notes} error={errors.notes} />
+            <TextField name="rating" label="Rating (1–5, optional)" value={values.rating} error={errors.rating} />
             <button type="submit" class="shelf-cta" mix={button({ tone: 'primary', size: 'lg' })}>
               Add album
             </button>
