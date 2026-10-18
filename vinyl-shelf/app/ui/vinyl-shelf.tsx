@@ -167,10 +167,16 @@ export function AlbumsPage(
 }
 
 export function AlbumDetailPage(
-  handle: Handle<{ album: Album; canManage: boolean; notice?: string }>,
+  handle: Handle<{
+    album: Album
+    canManage: boolean
+    notice?: string
+    transferEmail?: string
+    transferError?: string
+  }>,
 ) {
   return () => {
-    let { album, canManage, notice } = handle.props
+    let { album, canManage, notice, transferEmail = '', transferError } = handle.props
 
     return (
       <AppShell
@@ -220,6 +226,26 @@ export function AlbumDetailPage(
               </form>
             ) : null}
           </div>
+          {canManage ? (
+            <form method="post" action={routes.albums.transfer.href({ slug: album.slug })}>
+              <CsrfField />
+              <div mix={fieldStyle}>
+                <label htmlFor={`${handle.id}-transfer`}>Transfer to (email)</label>
+                <input
+                  id={`${handle.id}-transfer`}
+                  name="email"
+                  type="email"
+                  defaultValue={transferEmail}
+                  aria-invalid={transferError ? 'true' : undefined}
+                  mix={input({ size: 'lg' })}
+                />
+                {transferError ? <small mix={errorStyle}>{transferError}</small> : null}
+              </div>
+              <button type="submit" mix={button({ size: 'lg' })}>
+                Transfer album
+              </button>
+            </form>
+          ) : null}
         </article>
 
         <section mix={sectionStyle}>

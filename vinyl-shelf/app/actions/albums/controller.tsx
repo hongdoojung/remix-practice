@@ -8,6 +8,7 @@ import {
   getAlbum,
   getRecommendations,
   listAlbums,
+  transferAlbum,
 } from '../../data/albums.ts'
 import { validateCreateAlbum } from '../../data/validation.ts'
 import { requireUser } from '../../middleware/auth.ts'
@@ -93,6 +94,46 @@ export default createController(routes.albums, {
 
         flashNotice(context.session, 'Album deleted.')
         return redirect(routes.albums.index.href(), 303)
+      },
+    },
+    transfer: {
+      middleware: [requireUser()],
+      async handler(context) {
+        if (!context.auth.ok) return new Response('Unauthorized', { status: 401 })
+        let field = context.formData.get('email')
+        let email = typeof field === 'string' ? field.trim() : ''
+        let outcome = await transferAlbum(
+          context.db,
+          context.auth.identity.id,
+          context.params.slug,
+          email,
+        )
+
+        if (!outcome.ok && outcome.reason === 'not-found') {
+          return context.render(<NotFoundPage slug={context.params.slug} />, { status: 404 })
+        }
+        if (!outcome.ok && outcome.reason === 'forbidden') {
+          return context.render(<ForbiddenPage slug={context.params.slug} />, { status: 403 })
+        }
+        if (!outcome.ok) {
+          let album = await getAlbum(context.db, context.params.slug)
+          if (!album) {
+            return context.render(<NotFoundPage slug={context.params.slug} />, { status: 404 })
+          }
+
+          return context.render(
+            <AlbumDetailPage
+              album={album}
+              canManage
+              transferEmail={email}
+              transferError="No account uses that email."
+            />,
+            { status: 400 },
+          )
+        }
+
+        flashNotice(context.session, `Transferred ${outcome.album.title} to ${outcome.recipientName}.`)
+        return redirect(routes.albums.show.href({ slug: outcome.album.slug }), 303)
       },
     },
   },

@@ -116,6 +116,30 @@ export async function deleteAlbum(
   })
 }
 
+export type TransferAlbumResult =
+  | { ok: true; album: Album; recipientName: string }
+  | { ok: false; reason: 'not-found' | 'forbidden' | 'unknown-recipient' }
+
+/** Hands an album to another account. Only the current owner may do it. */
+export async function transferAlbum(
+  db: Database,
+  actorId: number,
+  slug: string,
+  recipientEmail: string,
+): Promise<TransferAlbumResult> {
+  return db.transaction(async (tx) => {
+    let album = await getAlbum(tx, slug)
+    if (!album) return { ok: false, reason: 'not-found' }
+    if (!canManageAlbum(album, actorId)) return { ok: false, reason: 'forbidden' }
+
+    let recipient = await findUserByEmail(tx, recipientEmail.trim().toLowerCase())
+    if (!recipient) return { ok: false, reason: 'unknown-recipient' }
+
+    let updated = await tx.update(albums, album.id, { owner_id: recipient.id })
+    return { ok: true, album: updated, recipientName: recipient.name }
+  })
+}
+
 /**
  * Albums that share a genre word or a decade with the given album. The list
  * lives behind its own GET route, so the detail page can stream it in a frame
