@@ -2,7 +2,7 @@ import { createController } from 'remix/router'
 import { redirect } from 'remix/response/redirect'
 
 import { createAlbum, deleteAlbum, getAlbum, getRecommendations, listAlbums } from '../../data/albums.ts'
-import { validateCreateAlbum } from '../../data/validation.ts'
+import { validateCreateAlbum, validateDeleteAlbum } from '../../data/validation.ts'
 import { routes } from '../../routes.ts'
 import { AlbumDetailPage, AlbumsPage, NotFoundPage } from '../../ui/vinyl-shelf.tsx'
 import { AlbumRecommendations } from './recommendations.tsx'
@@ -49,9 +49,21 @@ export default createController(routes.albums, {
       )
     },
     async destroy(context) {
-      let deleted = await deleteAlbum(context.db, context.params.slug)
-      if (!deleted) {
+      let { intent, revision } = validateDeleteAlbum(context.formData)
+      let outcome = await deleteAlbum(
+        context.db,
+        context.params.slug,
+        intent === 'delete-anyway' ? null : revision,
+      )
+
+      if (!outcome.ok && outcome.reason === 'not-found') {
         return context.render(<NotFoundPage slug={context.params.slug} />, { status: 404 })
+      }
+
+      if (!outcome.ok) {
+        // Someone edited the album after this page was built. The detail page
+        // comes back with the album as it stands now and a way to delete anyway.
+        return context.render(<AlbumDetailPage album={outcome.album} conflict />, { status: 409 })
       }
 
       return redirect(routes.albums.index.href(), 303)

@@ -89,11 +89,31 @@ export async function updateAlbum(
   })
 }
 
-export async function deleteAlbum(db: Database, slug: string) {
-  let album = await getAlbum(db, slug)
-  if (!album) return false
+export type DeleteAlbumResult =
+  | { ok: true }
+  | { ok: false; reason: 'not-found' }
+  /** `album` is the row as it stands now, so the page can show what changed. */
+  | { ok: false; reason: 'conflict'; album: Album }
 
-  return db.delete(albums, album.id)
+/**
+ * Deletes only when the page was built from the album's current revision.
+ * `null` skips the check: the user already saw the conflict and chose to delete.
+ */
+export async function deleteAlbum(
+  db: Database,
+  slug: string,
+  expectedRevision: number | null,
+): Promise<DeleteAlbumResult> {
+  return db.transaction(async (tx) => {
+    let album = await getAlbum(tx, slug)
+    if (!album) return { ok: false, reason: 'not-found' }
+    if (expectedRevision !== null && album.revision !== expectedRevision) {
+      return { ok: false, reason: 'conflict', album }
+    }
+
+    await tx.delete(albums, album.id)
+    return { ok: true }
+  })
 }
 
 /**
