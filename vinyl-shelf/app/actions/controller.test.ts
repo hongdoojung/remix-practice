@@ -119,7 +119,7 @@ describe('start here practice routes', () => {
     let response = await router.fetch(
       request(routes.albums.destroy.href({ slug: 'kind-of-blue' }), {
         method: 'POST',
-        body: new URLSearchParams({ _method: 'DELETE' }),
+        body: new URLSearchParams({ _method: 'DELETE', revision: '1' }),
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       }),
     )
@@ -726,6 +726,50 @@ describe('forms and mutations', () => {
 
     let album = await db.findOne(albums, { where: { slug: 'kind-of-blue' } })
     assert.equal(album?.revision, 1)
+  })
+
+  function deleteAlbum(fields: Record<string, string>) {
+    return router.fetch(
+      request(routes.albums.destroy.href({ slug: 'kind-of-blue' }), {
+        method: 'POST',
+        body: new URLSearchParams({ _method: 'DELETE', intent: 'delete', revision: '1', ...fields }),
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      }),
+    )
+  }
+
+  it('deletes an album built from the current revision and redirects to the list', async () => {
+    let response = await deleteAlbum({})
+
+    assert.equal(response.status, 303)
+    assert.equal(response.headers.get('location'), routes.albums.index.href())
+    assert.equal(await db.findOne(albums, { where: { slug: 'kind-of-blue' } }), null)
+  })
+
+  it('refuses a delete from a stale revision and shows the current album', async () => {
+    assert.equal((await editAlbum({ notes: 'Edited after the page was opened.' })).status, 303)
+
+    let response = await deleteAlbum({})
+    let html = await response.text()
+
+    assert.equal(response.status, 409)
+    assert.match(html, /Someone edited this album after you opened it/)
+    assert.match(html, /Edited after the page was opened\./)
+    assert.match(html, /name="intent" value="delete-anyway"/)
+
+    let album = await db.findOne(albums, { where: { slug: 'kind-of-blue' } })
+    assert.equal(album?.revision, 2)
+  })
+
+  it('deletes past the conflict when the user chooses to delete anyway', async () => {
+    assert.equal((await editAlbum({})).status, 303)
+    assert.equal((await deleteAlbum({})).status, 409)
+
+    let response = await deleteAlbum({ intent: 'delete-anyway' })
+
+    assert.equal(response.status, 303)
+    assert.equal(response.headers.get('location'), routes.albums.index.href())
+    assert.equal(await db.findOne(albums, { where: { slug: 'kind-of-blue' } }), null)
   })
 })
 

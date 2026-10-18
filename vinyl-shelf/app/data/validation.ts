@@ -72,6 +72,28 @@ export const albumEditFormSchema = f.object({
   revision: f.field(revisionField),
 })
 
+export type DeleteIntent = 'delete' | 'delete-anyway'
+
+// Same rule as the edit intent: an unknown value falls back to the guarded delete.
+const deleteIntentField = s
+  .defaulted(s.string(), 'delete')
+  .transform((value): DeleteIntent => (value === 'delete-anyway' ? 'delete-anyway' : 'delete'))
+
+export const albumDeleteFormSchema = f.object({
+  intent: f.field(deleteIntentField),
+  revision: f.field(revisionField),
+})
+
+/**
+ * The delete form has no field a user types into, so there is nothing to
+ * report back. A revision that does not parse matches no album and is answered
+ * as a stale page.
+ */
+export function validateDeleteAlbum(formData: FormData): { intent: DeleteIntent; revision: number } {
+  let result = s.parseSafe(albumDeleteFormSchema, formData)
+  return result.success ? result.value : { intent: 'delete', revision: 0 }
+}
+
 /**
  * Boundary validation for the album form. `parseSafe` keeps the failure path
  * a return value, which the actions translate into a 400 response.

@@ -146,9 +146,9 @@ export function AlbumsPage(
   }
 }
 
-export function AlbumDetailPage(handle: Handle<{ album: Album }>) {
+export function AlbumDetailPage(handle: Handle<{ album: Album; conflict?: boolean }>) {
   return () => {
-    let { album } = handle.props
+    let { album, conflict } = handle.props
 
     return (
       <AppShell
@@ -157,6 +157,12 @@ export function AlbumDetailPage(handle: Handle<{ album: Album }>) {
         activePath="/albums"
       >
         <article mix={detailStyle}>
+          {conflict ? (
+            <p role="alert" mix={errorStyle}>
+              Someone edited this album after you opened it. This page now shows the current
+              version — delete anyway if you still want it gone.
+            </p>
+          ) : null}
           <p mix={eyebrowStyle}>Route params</p>
           <h1 mix={titleStyle}>{album.title}</h1>
           <p mix={leadStyle}>
@@ -186,9 +192,16 @@ export function AlbumDetailPage(handle: Handle<{ album: Album }>) {
             </a>
             <form method="post" action={routes.albums.destroy.href({ slug: album.slug })}>
               <input type="hidden" name="_method" value="DELETE" />
-              <button type="submit" mix={dangerButtonStyle}>
-                Delete album
-              </button>
+              <input type="hidden" name="revision" value={String(album.revision)} />
+              {conflict ? (
+                <button type="submit" name="intent" value="delete-anyway" mix={dangerButtonStyle}>
+                  Delete anyway
+                </button>
+              ) : (
+                <button type="submit" name="intent" value="delete" mix={dangerButtonStyle}>
+                  Delete album
+                </button>
+              )}
             </form>
           </div>
         </article>
