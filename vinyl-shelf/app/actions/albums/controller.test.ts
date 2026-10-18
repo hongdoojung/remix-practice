@@ -4,7 +4,8 @@ import { before, beforeEach, describe, it } from 'node:test'
 import { Browser } from '../../../test/browser.ts'
 import { resetAlbumsForTest } from '../../data/albums.ts'
 import { db } from '../../data/database.ts'
-import { albums } from '../../data/schema.ts'
+import { albums, users } from '../../data/schema.ts'
+import { shelfOwnerEmail } from '../../data/users.ts'
 import { routes } from '../../routes.ts'
 
 const kindOfBlue = { slug: 'kind-of-blue' }
@@ -138,5 +139,63 @@ describe('auth: album ownership', () => {
 
     assert.equal(response.status, 403)
     assert.ok(await db.findOne(albums, { where: { slug: 'kind-of-blue' } }))
+  })
+})
+
+describe('auth: album transfer', () => {
+  it('hands the album to another account and drops the old owner to a visitor', async () => {
+    let owner = await Browser.signedIn()
+    let response = await owner.submit(routes.albums.transfer.href(kindOfBlue), {
+      email: 'guest@vinyl.test',
+    })
+
+    assert.equal(response.status, 303)
+    assert.equal(response.headers.get('location'), routes.albums.show.href(kindOfBlue))
+
+    let guestRow = await db.findOne(users, { where: { email: 'guest@vinyl.test' } })
+    let row = await db.findOne(albums, { where: { slug: 'kind-of-blue' } })
+    assert.equal(row?.owner_id, guestRow?.id)
+
+    let html = await (await owner.fetch(routes.albums.show.href(kindOfBlue))).text()
+    assert.match(html, /Transferred Kind of Blue to/)
+    assert.equal(html.includes('Edit album'), false)
+    assert.equal(html.includes('Delete album'), false)
+  })
+
+  it('shows the form again with a 400 for an email no account uses', async () => {
+    let owner = await Browser.signedIn()
+    let response = await owner.submit(routes.albums.transfer.href(kindOfBlue), {
+      email: 'nobody@vinyl.test',
+    })
+    let html = await response.text()
+
+    assert.equal(response.status, 400)
+    assert.match(html, /No account uses that email/)
+    assert.match(html, /value="nobody@vinyl\.test"/)
+  })
+
+  it('refuses a transfer from someone who does not own the album', async () => {
+    let response = await guest.submit(routes.albums.transfer.href(kindOfBlue), {
+      email: 'guest@vinyl.test',
+    })
+    let owner = await db.findOne(users, { where: { email: shelfOwnerEmail } })
+    let row = await db.findOne(albums, { where: { slug: 'kind-of-blue' } })
+
+    assert.equal(response.status, 403)
+    assert.equal(row?.owner_id, owner?.id)
+  })
+
+  it('refuses a transfer that carries no CSRF token', async () => {
+    let owner = await Browser.signedIn()
+    let response = await owner.fetch(routes.albums.transfer.href(kindOfBlue), {
+      method: 'POST',
+      body: new URLSearchParams({ email: 'guest@vinyl.test' }),
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    })
+    let ownerRow = await db.findOne(users, { where: { email: shelfOwnerEmail } })
+    let row = await db.findOne(albums, { where: { slug: 'kind-of-blue' } })
+
+    assert.equal(response.status, 403)
+    assert.equal(row?.owner_id, ownerRow?.id)
   })
 })
